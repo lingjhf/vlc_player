@@ -125,3 +125,7 @@ jobs:
       - name: Build Windows example
         working-directory: example
         run: flutter build windows
+
+      - name: Run Windows native tests
+        working-directory: example/build/windows/x64/plugins/vlc_player
+        run: ctest -C Release --output-on-failure --no-tests=error

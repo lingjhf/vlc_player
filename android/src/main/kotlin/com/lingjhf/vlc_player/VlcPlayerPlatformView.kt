@@ -165,7 +165,20 @@ internal class VlcPlayerPlatformView(
     }
 
     override fun onEvent(event: MediaPlayer.Event) {
-        when (event.type) {
+        val eventType = event.type
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            handlePlayerEvent(eventType)
+        } else {
+            mainHandler.post { handlePlayerEvent(eventType) }
+        }
+    }
+
+    private fun handlePlayerEvent(eventType: Int) {
+        if (disposed) {
+            return
+        }
+
+        when (eventType) {
             MediaPlayer.Event.Opening -> updateState(STATE_OPENING)
             MediaPlayer.Event.Buffering -> updateState(STATE_BUFFERING)
             MediaPlayer.Event.Playing -> updateState(STATE_PLAYING)
@@ -239,11 +252,16 @@ internal class VlcPlayerPlatformView(
         }
 
         fun send(event: Map<String, Any>) {
-            val eventSink = events ?: return
-            mainHandler.post {
-                if (!disposed && events === eventSink) {
-                    eventSink.success(event)
-                }
+            if (Looper.myLooper() == Looper.getMainLooper()) {
+                sendOnMainThread(event)
+            } else {
+                mainHandler.post { sendOnMainThread(event) }
+            }
+        }
+
+        private fun sendOnMainThread(event: Map<String, Any>) {
+            if (!disposed) {
+                events?.success(event)
             }
         }
     }
