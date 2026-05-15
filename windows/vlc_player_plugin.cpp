@@ -65,36 +65,32 @@ bool DirectoryExists(const std::wstring &path) {
 
 HMODULE LoadVlcRuntime(std::string *error) {
   const std::wstring app_directory = ExecutableDirectory();
-  if (!app_directory.empty()) {
-    const std::wstring bundled_libvlc = app_directory + L"\\libvlc.dll";
-    if (FileExists(bundled_libvlc)) {
-      const std::wstring plugins_directory = app_directory + L"\\plugins";
-      if (DirectoryExists(plugins_directory)) {
-        SetEnvironmentVariableW(L"VLC_PLUGIN_PATH", plugins_directory.c_str());
-      }
-
-      HMODULE module = LoadLibraryW(bundled_libvlc.c_str());
-      if (module != nullptr) {
-        return module;
-      }
-
-      *error =
-          "Unable to load bundled libvlc.dll from the Windows app directory. "
-          "Make sure libvlccore.dll and the VLC plugins directory are copied "
-          "next to the app executable.";
-      return nullptr;
-    }
+  if (app_directory.empty()) {
+    *error = "Unable to locate the Windows app directory.";
+    return nullptr;
   }
 
-  HMODULE module = LoadLibraryW(L"libvlc.dll");
+  const std::wstring bundled_libvlc = app_directory + L"\\libvlc.dll";
+  const std::wstring bundled_libvlccore = app_directory + L"\\libvlccore.dll";
+  const std::wstring plugins_directory = app_directory + L"\\plugins";
+  if (!FileExists(bundled_libvlc) || !FileExists(bundled_libvlccore) ||
+      !DirectoryExists(plugins_directory)) {
+    *error =
+        "The VLC Windows runtime is missing from the app bundle. Rebuild the "
+        "Windows app so the plugin can download and bundle VLC.";
+    return nullptr;
+  }
+
+  SetEnvironmentVariableW(L"VLC_PLUGIN_PATH", plugins_directory.c_str());
+  HMODULE module = LoadLibraryW(bundled_libvlc.c_str());
   if (module != nullptr) {
     return module;
   }
 
   *error =
-      "Unable to load libvlc.dll. Copy the VLC Windows runtime next to the app "
-      "executable, including libvlc.dll, libvlccore.dll, and the plugins "
-      "directory.";
+      "Unable to load bundled libvlc.dll from the Windows app directory. "
+      "Rebuild the Windows app so the plugin can download and bundle a "
+      "matching VLC runtime.";
   return nullptr;
 }
 

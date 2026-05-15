@@ -48,6 +48,53 @@ target_include_directories(${PLUGIN_NAME} INTERFACE
   "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(${PLUGIN_NAME} PRIVATE flutter flutter_wrapper_plugin)
 
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
+  message(FATAL_ERROR "vlc_player currently supports Windows x64 builds only.")
+endif()
+
+set(VLC_PLAYER_VLC_VERSION "3.0.21")
+set(VLC_PLAYER_VLC_ARCHIVE "vlc-${VLC_PLAYER_VLC_VERSION}-win64.zip")
+set(VLC_PLAYER_VLC_URL
+  "https://download.videolan.org/pub/videolan/vlc/${VLC_PLAYER_VLC_VERSION}/win64/${VLC_PLAYER_VLC_ARCHIVE}")
+set(VLC_PLAYER_VLC_SHA256
+  "a0b7ec02b50adf6417eed014fb8df50af39690505a4225b85b3dc2ed17d14843")
+set(VLC_PLAYER_VLC_DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/vlc")
+set(VLC_PLAYER_VLC_ARCHIVE_PATH
+  "${VLC_PLAYER_VLC_DOWNLOAD_DIR}/${VLC_PLAYER_VLC_ARCHIVE}")
+set(VLC_PLAYER_RUNTIME_DIR
+  "${VLC_PLAYER_VLC_DOWNLOAD_DIR}/vlc-${VLC_PLAYER_VLC_VERSION}")
+
+if(NOT EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" OR
+   NOT EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlccore.dll" OR
+   NOT EXISTS "${VLC_PLAYER_RUNTIME_DIR}/plugins")
+  message(STATUS "Downloading VLC ${VLC_PLAYER_VLC_VERSION} Windows runtime")
+  file(MAKE_DIRECTORY "${VLC_PLAYER_VLC_DOWNLOAD_DIR}")
+  file(DOWNLOAD
+    "${VLC_PLAYER_VLC_URL}"
+    "${VLC_PLAYER_VLC_ARCHIVE_PATH}"
+    EXPECTED_HASH "SHA256=${VLC_PLAYER_VLC_SHA256}"
+    SHOW_PROGRESS
+    STATUS vlc_player_download_status
+    TLS_VERIFY ON)
+  list(GET vlc_player_download_status 0 vlc_player_download_code)
+  list(GET vlc_player_download_status 1 vlc_player_download_message)
+  if(NOT vlc_player_download_code EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to download VLC Windows runtime from ${VLC_PLAYER_VLC_URL}: "
+      "${vlc_player_download_message}")
+  endif()
+
+  file(REMOVE_RECURSE "${VLC_PLAYER_RUNTIME_DIR}")
+  execute_process(
+    COMMAND "${CMAKE_COMMAND}" -E tar xzf "${VLC_PLAYER_VLC_ARCHIVE_PATH}"
+    WORKING_DIRECTORY "${VLC_PLAYER_VLC_DOWNLOAD_DIR}"
+    RESULT_VARIABLE vlc_player_extract_result)
+  if(NOT vlc_player_extract_result EQUAL 0)
+    message(FATAL_ERROR
+      "Failed to extract VLC Windows runtime from ${VLC_PLAYER_VLC_ARCHIVE_PATH}.")
+  endif()
+endif()
+
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
@@ -55,6 +102,27 @@ set(vlc_player_bundled_libraries
   ""
   PARENT_SCOPE
 )
+if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" AND
+   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlccore.dll" AND
+   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/plugins")
+  file(GLOB VLC_PLAYER_RUNTIME_DLLS "${VLC_PLAYER_RUNTIME_DIR}/*.dll")
+  set(vlc_player_bundled_libraries
+    ${VLC_PLAYER_RUNTIME_DLLS}
+    PARENT_SCOPE
+  )
+
+  foreach(vlc_player_runtime_directory hrtfs locale lua plugins skins)
+    if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}")
+      install(DIRECTORY "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}"
+        DESTINATION "."
+        COMPONENT Runtime)
+    endif()
+  endforeach()
+else()
+  message(FATAL_ERROR
+    "Incomplete downloaded VLC Windows runtime in ${VLC_PLAYER_RUNTIME_DIR}. "
+    "Expected libvlc.dll, libvlccore.dll, and plugins/.")
+endif()
 
 # === Tests ===
 # These unit tests can be run from a terminal after building the example, or

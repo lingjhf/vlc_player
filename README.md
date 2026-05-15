@@ -87,28 +87,20 @@ pod install
 
 ### Windows
 
-The Windows implementation loads VLC from the application executable directory
-at runtime. Download the VLC Windows runtime package or install VLC, then copy
-these files into the same directory as your app `.exe`:
-
-```text
-your_app.exe
-libvlc.dll
-libvlccore.dll
-plugins/
-```
-
-For a release build, the executable directory is usually:
+The Windows implementation downloads the VLC Windows runtime during
+`flutter build windows` and bundles it into your app automatically.
 
 ```text
 build/windows/x64/runner/Release/
+  your_app.exe
+  libvlc.dll
+  libvlccore.dll
+  plugins/
 ```
 
-You can copy the files from an installed VLC directory such as
-`C:\Program Files\VideoLAN\VLC\`, or from the official VLC Windows zip package.
-If `libvlc.dll` is not present next to the app executable, the plugin falls back
-to the system DLL search path, but production builds should bundle the VLC
-runtime with the app.
+The build downloads VLC `3.0.21` for Windows x64 from VideoLAN and verifies the
+archive SHA-256 before extraction. Windows builds require network access the
+first time the runtime is downloaded.
 
 Windows video is rendered through a Flutter texture backed by libVLC video
 callbacks, so the Dart API is the same as the other platforms.
