@@ -32,6 +32,72 @@ using EncodableList = flutter::EncodableList;
 using EncodableMap = flutter::EncodableMap;
 using EncodableValue = flutter::EncodableValue;
 
+std::wstring ExecutableDirectory() {
+  std::wstring path(MAX_PATH, L'\0');
+  while (true) {
+    const DWORD length = GetModuleFileNameW(
+        nullptr, path.data(), static_cast<DWORD>(path.size()));
+    if (length == 0) {
+      return L"";
+    }
+    if (static_cast<size_t>(length) < path.size()) {
+      path.resize(length);
+      break;
+    }
+    path.resize(path.size() * 2);
+  }
+
+  const size_t separator = path.find_last_of(L"\\/");
+  return separator == std::wstring::npos ? L"" : path.substr(0, separator);
+}
+
+bool FileExists(const std::wstring &path) {
+  const DWORD attributes = GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_DIRECTORY) == 0;
+}
+
+bool DirectoryExists(const std::wstring &path) {
+  const DWORD attributes = GetFileAttributesW(path.c_str());
+  return attributes != INVALID_FILE_ATTRIBUTES &&
+         (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+}
+
+HMODULE LoadVlcRuntime(std::string *error) {
+  const std::wstring app_directory = ExecutableDirectory();
+  if (!app_directory.empty()) {
+    const std::wstring bundled_libvlc = app_directory + L"\\libvlc.dll";
+    if (FileExists(bundled_libvlc)) {
+      const std::wstring plugins_directory = app_directory + L"\\plugins";
+      if (DirectoryExists(plugins_directory)) {
+        SetEnvironmentVariableW(L"VLC_PLUGIN_PATH", plugins_directory.c_str());
+      }
+
+      HMODULE module = LoadLibraryW(bundled_libvlc.c_str());
+      if (module != nullptr) {
+        return module;
+      }
+
+      *error =
+          "Unable to load bundled libvlc.dll from the Windows app directory. "
+          "Make sure libvlccore.dll and the VLC plugins directory are copied "
+          "next to the app executable.";
+      return nullptr;
+    }
+  }
+
+  HMODULE module = LoadLibraryW(L"libvlc.dll");
+  if (module != nullptr) {
+    return module;
+  }
+
+  *error =
+      "Unable to load libvlc.dll. Copy the VLC Windows runtime next to the app "
+      "executable, including libvlc.dll, libvlccore.dll, and the plugins "
+      "directory.";
+  return nullptr;
+}
+
 struct libvlc_instance_t;
 struct libvlc_media_t;
 struct libvlc_media_player_t;
@@ -93,11 +159,8 @@ class LibVlcApi {
 
  private:
   LibVlcApi() {
-    module_ = LoadLibraryW(L"libvlc.dll");
+    module_ = LoadVlcRuntime(&error_);
     if (module_ == nullptr) {
-      error_ =
-          "Unable to load libvlc.dll. Install VLC or bundle the VLC runtime "
-          "with the Windows app.";
       return;
     }
 
