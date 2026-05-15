@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dart-and-android:
+    name: Dart and Android
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Analyze
+        run: dart analyze lib test example/lib example/test example/integration_test
+
+      - name: Run package tests
+        run: flutter test
+
+      - name: Run example widget tests
+        working-directory: example
+        run: flutter test test/widget_test.dart
+
+      - name: Build Android example
+        working-directory: example
+        run: flutter build apk --debug
+
+  apple:
+    name: iOS and macOS
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build iOS example
+        working-directory: example
+        run: flutter build ios --no-codesign
+
+      - name: Build macOS example
+        working-directory: example
+        run: flutter build macos
+
+      - name: Run macOS integration tests
+        working-directory: example
+        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
