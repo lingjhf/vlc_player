@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.6.0 - 2026-05-16
+
+### Added
+
+- Added `VlcPlaylistLoopMode` for playlist repeat behavior, including
+  `loopOne` and `loopAll` handling for auto advance and manual navigation.
+
 ## 0.5.0 - 2026-05-16
 
 ### Added

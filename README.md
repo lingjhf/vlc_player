@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.5.0
+  vlc_player: ^0.6.0
 ```
 
 If you are using this repository directly:
@@ -239,7 +239,7 @@ Methods:
 - `setSource(Uri source, {bool autoPlay = false, Map<String, String> httpHeaders = const <String, String>{}})`: Loads a new media URI.
 - `setMedia(VlcMediaSource source, {bool autoPlay = false})`: Loads a media URI
   with HTTP headers, VLC media options, and an optional start position.
-- `setPlaylist(List<VlcMediaSource> sources, {int initialIndex = 0, bool autoPlay = false, bool autoAdvance = true})`: Loads a playlist and selects the initial item.
+- `setPlaylist(List<VlcMediaSource> sources, {int initialIndex = 0, bool autoPlay = false, bool autoAdvance = true, VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none})`: Loads a playlist and selects the initial item.
 - `next({bool autoPlay = true})`: Moves to the next playlist item. Returns
   `false` at the end of the playlist.
 - `previous({bool autoPlay = true})`: Moves to the previous playlist item.
@@ -266,8 +266,10 @@ Track methods return `VlcTrackDescription`. `getMediaInfo()` returns
 audio, and subtitle track details when VLC exposes them.
 
 Playlist state is exposed through `playlist`, `playlistIndex`,
-`currentMediaSource`, `hasNext`, and `hasPrevious`. When `autoAdvance` is true,
-the controller loads the next item after VLC reports the current media ended.
+`playlistLoopMode`, `currentMediaSource`, `hasNext`, and `hasPrevious`. When
+`autoAdvance` is true, the controller loads the next item after VLC reports the
+current media ended. `VlcPlaylistLoopMode.loopOne` repeats the current item, and
+`VlcPlaylistLoopMode.loopAll` wraps at the beginning or end of the playlist.
 
 ### VlcMediaSource
 

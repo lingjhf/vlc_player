@@ -579,6 +579,118 @@ void main() {
 
       controller.dispose();
     });
+
+    test('loopAll wraps manual next and previous at playlist bounds', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(57);
+      await controller.attach(57);
+      await controller.setPlaylist(
+        sources,
+        initialIndex: 1,
+        loopMode: VlcPlaylistLoopMode.loopAll,
+      );
+      calls.clear();
+
+      expect(await controller.next(), isTrue);
+      expect(controller.playlistIndex, 0);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 57,
+        'uri': 'https://example.com/one.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      calls.clear();
+      expect(await controller.previous(), isTrue);
+      expect(controller.playlistIndex, 1);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 57,
+        'uri': 'https://example.com/two.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('ended events wrap to the first item in loopAll mode', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(58);
+      await controller.attach(58);
+      await controller.setPlaylist(
+        sources,
+        initialIndex: 1,
+        loopMode: VlcPlaylistLoopMode.loopAll,
+      );
+      calls.clear();
+
+      final channel = EventChannel('vlc_player/events/58');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.playlistIndex, 0);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 58,
+        'uri': 'https://example.com/one.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('ended events reload the current item in loopOne mode', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+      ];
+
+      mockEventChannel(59);
+      await controller.attach(59);
+      await controller.setPlaylist(
+        sources,
+        loopMode: VlcPlaylistLoopMode.loopOne,
+      );
+      calls.clear();
+
+      final channel = EventChannel('vlc_player/events/59');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.playlistIndex, 0);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 59,
+        'uri': 'https://example.com/one.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
   });
 
   group('platform view lifecycle', () {
