@@ -427,7 +427,7 @@ class WindowsVlcPlayer {
     if (const auto error = ActiveError(); !error.empty()) {
       return error;
     }
-    playback_speed_ = std::max(0.01, speed);
+    playback_speed_ = (std::max)(0.01, speed);
     LibVlcApi::Instance().media_player_set_rate(
         player_, static_cast<float>(playback_speed_));
     SendSnapshot();
