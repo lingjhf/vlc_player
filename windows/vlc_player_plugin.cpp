@@ -12,6 +12,8 @@
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
 #include <flutter/texture_registrar.h>
+#include <flutter_messenger.h>
+#include <flutter_plugin_registrar.h>
 
 #include <algorithm>
 #include <atomic>
@@ -327,8 +329,10 @@ class WindowsVlcPlayer {
  public:
   WindowsVlcPlayer(int64_t view_id, flutter::BinaryMessenger *messenger,
                    flutter::TextureRegistrar *texture_registrar,
+                   FlutterDesktopMessengerRef messenger_ref,
                    const std::vector<std::string> &options)
       : texture_registrar_(texture_registrar),
+        messenger_ref_(messenger_ref),
         event_channel_(messenger, "vlc_player/events/" + std::to_string(view_id),
                        &flutter::StandardMethodCodec::GetInstance()) {
     auto stream_handler =
@@ -387,7 +391,7 @@ class WindowsVlcPlayer {
     polling_thread_ = std::thread([this] {
       while (polling_.load()) {
         std::this_thread::sleep_for(std::chrono::milliseconds(500));
-        SendSnapshot();
+        SendSnapshot(true);
       }
     });
   }
@@ -420,8 +424,11 @@ class WindowsVlcPlayer {
 
     api.media_player_set_media(player_, media);
     api.media_release(media);
-    state_override_ = "opening";
-    error_description_.clear();
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      state_override_ = "opening";
+      error_description_.clear();
+    }
     SendSnapshot();
 
     if (auto_play) {
@@ -437,7 +444,10 @@ class WindowsVlcPlayer {
     if (LibVlcApi::Instance().media_player_play(player_) != 0) {
       return "VLC failed to start playback.";
     }
-    state_override_.clear();
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      state_override_.clear();
+    }
     SendSnapshot();
     return "";
   }
@@ -447,7 +457,10 @@ class WindowsVlcPlayer {
       return error;
     }
     LibVlcApi::Instance().media_player_pause(player_);
-    state_override_.clear();
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      state_override_.clear();
+    }
     SendSnapshot();
     return "";
   }
@@ -457,7 +470,10 @@ class WindowsVlcPlayer {
       return error;
     }
     LibVlcApi::Instance().media_player_stop(player_);
-    state_override_ = "stopped";
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      state_override_ = "stopped";
+    }
     SendSnapshot();
     return "";
   }
@@ -476,8 +492,12 @@ class WindowsVlcPlayer {
     if (const auto error = ActiveError(); !error.empty()) {
       return error;
     }
-    volume_ = std::clamp(volume, 0, 200);
-    LibVlcApi::Instance().audio_set_volume(player_, volume_);
+    const int normalized_volume = std::clamp(volume, 0, 200);
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      volume_ = normalized_volume;
+    }
+    LibVlcApi::Instance().audio_set_volume(player_, normalized_volume);
     SendSnapshot();
     return "";
   }
@@ -486,9 +506,9 @@ class WindowsVlcPlayer {
     if (const auto error = ActiveError(); !error.empty()) {
       return error;
     }
-    playback_speed_ = (std::max)(0.01, speed);
+    const double normalized_speed = (std::max)(0.01, speed);
     LibVlcApi::Instance().media_player_set_rate(
-        player_, static_cast<float>(playback_speed_));
+        player_, static_cast<float>(normalized_speed));
     SendSnapshot();
     return "";
   }
@@ -548,10 +568,13 @@ class WindowsVlcPlayer {
       return nullptr;
     }
     planes[0] = player->frame_buffer_.data();
-    return nullptr;
+    return player;
   }
 
   static void Unlock(void *opaque, void *picture, void *const *planes) {
+    if (picture == nullptr) {
+      return;
+    }
     auto *player = static_cast<WindowsVlcPlayer *>(opaque);
     player->render_buffer_ = player->frame_buffer_;
     player->pixel_buffer_.buffer = player->render_buffer_.data();
@@ -598,40 +621,56 @@ class WindowsVlcPlayer {
     return "";
   }
 
-  void SendSnapshot() {
+  void SendSnapshot(bool lock_messenger = false) {
     if (disposed_.load() || player_ == nullptr) {
       return;
     }
 
     auto &api = LibVlcApi::Instance();
     const int state = api.media_player_get_state(player_);
-    if (state == 7) {
-      error_description_ = "VLC encountered an error while playing the media.";
+    std::string state_name;
+    int volume = 100;
+    std::string error_description;
+    {
+      std::lock_guard<std::mutex> lock(state_mutex_);
+      if (state == 7) {
+        error_description_ = "VLC encountered an error while playing the media.";
+      }
+      state_name = state_override_.empty() ? StateName(state) : state_override_;
+      volume = volume_;
+      error_description = error_description_;
     }
 
     EncodableMap event;
-    event[EncodableValue("state")] =
-        EncodableValue(state_override_.empty() ? StateName(state)
-                                               : state_override_);
+    event[EncodableValue("state")] = EncodableValue(state_name);
     event[EncodableValue("position")] = EncodableValue(
         std::max<int64_t>(0, api.media_player_get_time(player_)));
     event[EncodableValue("duration")] = EncodableValue(
         std::max<int64_t>(0, api.media_player_get_length(player_)));
-    event[EncodableValue("volume")] = EncodableValue(volume_);
+    event[EncodableValue("volume")] = EncodableValue(volume);
     event[EncodableValue("playbackSpeed")] =
         EncodableValue(static_cast<double>(api.media_player_get_rate(player_)));
-    if (!error_description_.empty()) {
+    if (!error_description.empty()) {
       event[EncodableValue("errorDescription")] =
-          EncodableValue(error_description_);
+          EncodableValue(error_description);
     }
 
     std::lock_guard<std::mutex> lock(event_mutex_);
     if (event_sink_) {
+      if (lock_messenger && messenger_ref_ != nullptr) {
+        FlutterDesktopMessengerLock(messenger_ref_);
+        if (FlutterDesktopMessengerIsAvailable(messenger_ref_)) {
+          event_sink_->Success(EncodableValue(event));
+        }
+        FlutterDesktopMessengerUnlock(messenger_ref_);
+        return;
+      }
       event_sink_->Success(EncodableValue(event));
     }
   }
 
   flutter::TextureRegistrar *texture_registrar_;
+  FlutterDesktopMessengerRef messenger_ref_;
   flutter::EventChannel<EncodableValue> event_channel_;
   std::unique_ptr<flutter::EventSink<EncodableValue>> event_sink_;
   std::mutex event_mutex_;
@@ -650,8 +689,8 @@ class WindowsVlcPlayer {
   std::vector<uint8_t> frame_buffer_;
   std::vector<uint8_t> render_buffer_;
 
+  std::mutex state_mutex_;
   int volume_ = 100;
-  double playback_speed_ = 1.0;
   std::string state_override_;
   std::string error_description_;
 };
@@ -659,13 +698,28 @@ class WindowsVlcPlayer {
 // static
 void VlcPlayerPlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows *registrar) {
+  RegisterWithRegistrar(registrar, nullptr);
+}
+
+void VlcPlayerPlugin::RegisterWithRegistrar(
+    flutter::PluginRegistrarWindows *registrar,
+    FlutterDesktopPluginRegistrarRef core_registrar) {
   auto channel =
       std::make_unique<flutter::MethodChannel<EncodableValue>>(
           registrar->messenger(), "vlc_player",
           &flutter::StandardMethodCodec::GetInstance());
 
+  FlutterDesktopMessengerRef messenger_ref = nullptr;
+  if (core_registrar != nullptr) {
+    FlutterDesktopMessengerRef registrar_messenger =
+        FlutterDesktopPluginRegistrarGetMessenger(core_registrar);
+    if (registrar_messenger != nullptr) {
+      messenger_ref = FlutterDesktopMessengerAddRef(registrar_messenger);
+    }
+  }
+
   auto plugin = std::make_unique<VlcPlayerPlugin>(
-      registrar->messenger(), registrar->texture_registrar());
+      registrar->messenger(), registrar->texture_registrar(), messenger_ref);
 
   channel->SetMethodCallHandler(
       [plugin_pointer = plugin.get()](const auto &call, auto result) {
@@ -676,11 +730,18 @@ void VlcPlayerPlugin::RegisterWithRegistrar(
 }
 
 VlcPlayerPlugin::VlcPlayerPlugin(flutter::BinaryMessenger *messenger,
-                                 flutter::TextureRegistrar *texture_registrar)
-    : messenger_(messenger), texture_registrar_(texture_registrar) {}
+                                 flutter::TextureRegistrar *texture_registrar,
+                                 FlutterDesktopMessengerRef messenger_ref)
+    : messenger_(messenger),
+      texture_registrar_(texture_registrar),
+      messenger_ref_(messenger_ref) {}
 
 VlcPlayerPlugin::~VlcPlayerPlugin() {
   players_.clear();
+  if (messenger_ref_ != nullptr) {
+    FlutterDesktopMessengerRelease(messenger_ref_);
+    messenger_ref_ = nullptr;
+  }
 }
 
 void VlcPlayerPlugin::HandleMethodCall(
@@ -700,7 +761,7 @@ void VlcPlayerPlugin::HandleMethodCall(
                              : ReadStringList(*arguments, "options");
     const int64_t view_id = next_view_id_++;
     auto player = std::make_unique<WindowsVlcPlayer>(
-        view_id, messenger_, texture_registrar_, options);
+        view_id, messenger_, texture_registrar_, messenger_ref_, options);
     if (!player->is_valid()) {
       result->Error("create_failed", player->error());
       return;

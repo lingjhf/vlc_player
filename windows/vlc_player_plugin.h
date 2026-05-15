@@ -22,9 +22,13 @@ class WindowsVlcPlayer;
 class VlcPlayerPlugin : public flutter::Plugin {
  public:
   static void RegisterWithRegistrar(flutter::PluginRegistrarWindows *registrar);
+  static void RegisterWithRegistrar(
+      flutter::PluginRegistrarWindows *registrar,
+      FlutterDesktopPluginRegistrarRef core_registrar);
 
   VlcPlayerPlugin(flutter::BinaryMessenger *messenger,
-                  flutter::TextureRegistrar *texture_registrar);
+                  flutter::TextureRegistrar *texture_registrar,
+                  FlutterDesktopMessengerRef messenger_ref = nullptr);
 
   virtual ~VlcPlayerPlugin();
 
@@ -44,6 +48,7 @@ class VlcPlayerPlugin : public flutter::Plugin {
 
   flutter::BinaryMessenger *messenger_;
   flutter::TextureRegistrar *texture_registrar_;
+  FlutterDesktopMessengerRef messenger_ref_;
   int64_t next_view_id_ = 1;
   std::unordered_map<int64_t, std::unique_ptr<WindowsVlcPlayer>> players_;
 };

@@ -8,5 +8,6 @@ void VlcPlayerPluginCApiRegisterWithRegistrar(
     FlutterDesktopPluginRegistrarRef registrar) {
   vlc_player::VlcPlayerPlugin::RegisterWithRegistrar(
       flutter::PluginRegistrarManager::GetInstance()
-          ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar));
+          ->GetRegistrar<flutter::PluginRegistrarWindows>(registrar),
+      registrar);
 }
