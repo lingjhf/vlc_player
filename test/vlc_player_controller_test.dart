@@ -1,0 +1,227 @@
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vlc_player/vlc_player.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  final calls = <MethodCall>[];
+  final eventChannels = <EventChannel>[];
+
+  setUp(() {
+    calls.clear();
+    eventChannels.clear();
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          call,
+        ) async {
+          calls.add(call);
+          return null;
+        });
+  });
+
+  tearDown(() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(VlcPlayerController.methodChannel, null);
+    for (final channel in eventChannels) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockStreamHandler(channel, null);
+    }
+  });
+
+  void mockEventChannel(int viewId) {
+    final channel = EventChannel('vlc_player/events/$viewId');
+    eventChannels.add(channel);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          channel,
+          MockStreamHandler.inline(onListen: (arguments, events) {}),
+        );
+  }
+
+  group('source setup', () {
+    test(
+      'setSource before attach is replayed when the platform view is created',
+      () async {
+        final controller = VlcPlayerController();
+
+        await controller.setSource(Uri.parse('https://example.com/video.mp4'));
+        expect(calls, isEmpty);
+
+        mockEventChannel(7);
+        await controller.attach(7);
+
+        expect(calls, hasLength(1));
+        expect(calls.single.method, 'setSource');
+        expect(calls.single.arguments, <String, Object?>{
+          'viewId': 7,
+          'uri': 'https://example.com/video.mp4',
+          'autoPlay': false,
+          'httpHeaders': <String, String>{},
+        });
+
+        controller.dispose();
+      },
+    );
+
+    test('HLS source uri is passed through to the native VLC player', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(9);
+      await controller.attach(9);
+
+      await controller.setSource(
+        Uri.parse('https://example.com/live/playlist.m3u8'),
+        autoPlay: true,
+      );
+
+      expect(calls, hasLength(1));
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 9,
+        'uri': 'https://example.com/live/playlist.m3u8',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+  });
+
+  group('platform view lifecycle', () {
+    test('attach with the same view id does not replay source', () async {
+      final controller = VlcPlayerController(
+        source: Uri.parse('https://example.com/video.mp4'),
+      );
+
+      mockEventChannel(3);
+      await controller.attach(3);
+      await controller.attach(3);
+
+      expect(calls.map((call) => call.method), <String>['setSource']);
+
+      controller.dispose();
+    });
+
+    test('attach to a new view id disposes the previous native view', () async {
+      final controller = VlcPlayerController(
+        source: Uri.parse('https://example.com/video.mp4'),
+      );
+
+      mockEventChannel(1);
+      mockEventChannel(2);
+      await controller.attach(1);
+
+      calls.clear();
+      await controller.attach(2);
+
+      expect(calls.map((call) => call.method), <String>[
+        'dispose',
+        'setSource',
+      ]);
+      expect(calls[0].arguments, <String, Object?>{'viewId': 1});
+      expect(calls[1].arguments, <String, Object?>{
+        'viewId': 2,
+        'uri': 'https://example.com/video.mp4',
+        'autoPlay': false,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('dispose releases the current native view once', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(4);
+      await controller.attach(4);
+
+      calls.clear();
+      controller.dispose();
+      controller.dispose();
+      await Future<void>.delayed(Duration.zero);
+
+      expect(calls.map((call) => call.method), <String>['dispose']);
+      expect(calls.single.arguments, <String, Object?>{'viewId': 4});
+    });
+
+    test('events arriving after dispose are ignored', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(5);
+      await controller.attach(5);
+
+      final channel = EventChannel('vlc_player/events/5');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'playing',
+            }),
+            null,
+          );
+      expect(controller.value.state, VlcPlaybackState.playing);
+
+      controller.dispose();
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'paused',
+            }),
+            null,
+          );
+    });
+  });
+
+  group('playback controls', () {
+    test('commands include the attached view id', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(12);
+      await controller.attach(12);
+
+      await controller.play();
+      await controller.seekTo(const Duration(seconds: 3));
+      await controller.setVolume(250);
+      await controller.setPlaybackSpeed(1.5);
+
+      expect(calls.map((call) => call.method), <String>[
+        'play',
+        'seekTo',
+        'setVolume',
+        'setPlaybackSpeed',
+      ]);
+      expect(calls[0].arguments, <String, Object?>{'viewId': 12});
+      expect(calls[1].arguments, <String, Object?>{
+        'viewId': 12,
+        'position': 3000,
+      });
+      expect(calls[2].arguments, <String, Object?>{
+        'viewId': 12,
+        'volume': 200,
+      });
+      expect(calls[3].arguments, <String, Object?>{'viewId': 12, 'speed': 1.5});
+
+      controller.dispose();
+    });
+
+    test('commands before attach fail clearly', () {
+      final controller = VlcPlayerController();
+
+      expect(controller.play, throwsStateError);
+
+      controller.dispose();
+    });
+
+    test('negative seek positions fail before reaching native code', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(13);
+      await controller.attach(13);
+
+      expect(
+        () => controller.seekTo(const Duration(milliseconds: -1)),
+        throwsArgumentError,
+      );
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+  });
+}

@@ -1,0 +1,130 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:vlc_player_example/main.dart';
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('example app starts', (WidgetTester tester) async {
+    await tester.pumpWidget(const MyApp(showPlayer: false));
+
+    expect(find.text('vlc_player example'), findsOneWidget);
+    expect(find.text('Video file'), findsOneWidget);
+    expect(find.text('HLS stream'), findsOneWidget);
+    expect(find.text('Full player'), findsOneWidget);
+  });
+
+  testWidgets('example pages can be opened from the list', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp(showPlayer: false));
+
+    await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('MP4 sample video'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('hls-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('M3U8 sample stream'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-player-example-tile')),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey<String>('full-player-play-pause-button')),
+      findsOneWidget,
+    );
+    expect(
+      find.byKey(const ValueKey<String>('full-player-seek-slider')),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('video and HLS pages create the native player view', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp());
+
+    await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('MP4 sample video'), findsOneWidget);
+    await _waitForEnabledIconButton(
+      tester,
+      const ValueKey<String>('video file-play'),
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('video file-play')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey<String>('video file-pause')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey<String>('video file-stop')));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('hls-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('M3U8 sample stream'), findsOneWidget);
+    await _waitForEnabledIconButton(
+      tester,
+      const ValueKey<String>('hls stream-play'),
+    );
+    await tester.tap(find.byKey(const ValueKey<String>('hls stream-play')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey<String>('hls stream-pause')));
+    await tester.pump(const Duration(seconds: 1));
+    expect(tester.takeException(), isNull);
+
+    await tester.tap(find.byKey(const ValueKey<String>('hls stream-stop')));
+    await tester.pump(const Duration(seconds: 2));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('full player orientation control updates the button state', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp(showPlayer: false));
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-player-example-tile')),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-player-orientation-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);
+  });
+}
+
+Future<void> _waitForEnabledIconButton(
+  WidgetTester tester,
+  ValueKey<String> key,
+) async {
+  final finder = find.byKey(key);
+  for (var i = 0; i < 40; i += 1) {
+    await tester.pump(const Duration(milliseconds: 250));
+    if (finder.evaluate().isEmpty) {
+      continue;
+    }
+    final button = tester.widget<IconButton>(finder);
+    if (button.onPressed != null) {
+      return;
+    }
+  }
+  fail('Timed out waiting for enabled IconButton with key ${key.value}.');
+}
