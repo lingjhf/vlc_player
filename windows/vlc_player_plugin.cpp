@@ -1,5 +1,8 @@
 #include "vlc_player_plugin.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <windows.h>
 
 #include <flutter/event_channel.h>
