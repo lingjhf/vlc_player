@@ -318,8 +318,11 @@ class WindowsVlcPlayer {
 
   std::string SetSource(const std::string &uri,
                         const std::vector<std::string> &headers,
+                        const std::vector<std::string> &media_options,
+                        int64_t start_position,
                         bool auto_play) {
-    const std::string error = core_->SetSource(uri, headers, false);
+    const std::string error =
+        core_->SetSource(uri, headers, media_options, start_position, false);
     SendSnapshot();
     if (!error.empty() || !auto_play) {
       return error;
@@ -600,8 +603,17 @@ void VlcPlayerPlugin::HandleMethodCall(
 
   std::string error;
   if (method_call.method_name() == "setSource") {
+    int64_t start_position = 0;
+    if (ReadInt64(*arguments, "startPosition", &start_position) &&
+        start_position < 0) {
+      result->Error("invalid_args",
+                    "A non-negative startPosition is required.");
+      return;
+    }
     error = player->SetSource(ReadString(*arguments, "uri"),
                               ReadHeaders(*arguments),
+                              ReadStringList(*arguments, "mediaOptions"),
+                              start_position,
                               ReadBool(*arguments, "autoPlay"));
     if (error == "A non-empty uri is required.") {
       result->Error("invalid_args", error);

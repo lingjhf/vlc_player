@@ -31,6 +31,8 @@ class VlcPlayerCore {
 
   std::string SetSource(const std::string& uri,
                         const std::vector<std::string>& headers,
+                        const std::vector<std::string>& media_options,
+                        int64_t start_position,
                         bool auto_play);
   std::string Play();
   std::string Pause();

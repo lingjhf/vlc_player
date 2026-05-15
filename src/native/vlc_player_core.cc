@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstring>
 #include <exception>
+#include <sstream>
 #include <utility>
 
 namespace vlc_player {
@@ -60,6 +61,9 @@ const std::string& VlcPlayerCore::error() const {
 
 std::string VlcPlayerCore::SetSource(const std::string& uri,
                                      const std::vector<std::string>& headers,
+                                     const std::vector<std::string>&
+                                         media_options,
+                                     int64_t start_position,
                                      bool auto_play) {
   if (const auto error = ActiveError(); !error.empty()) {
     return error;
@@ -72,6 +76,14 @@ std::string VlcPlayerCore::SetSource(const std::string& uri,
     VLC::Media media(*instance_, uri, VLC::Media::FromLocation);
     for (const auto& header : headers) {
       media.addOption(header);
+    }
+    for (const auto& option : media_options) {
+      media.addOption(option);
+    }
+    if (start_position > 0) {
+      std::ostringstream option;
+      option << ":start-time=" << (static_cast<double>(start_position) / 1000);
+      media.addOption(option.str());
     }
     player_->setMedia(media);
   } catch (const std::exception&) {

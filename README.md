@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.3.0
+  vlc_player: ^0.4.0
 ```
 
 If you are using this repository directly:
@@ -187,8 +187,8 @@ Calling commands such as `play()` before attachment throws a `StateError`.
 Native platform failures throw `VlcPlayerException`, which exposes a structured
 `VlcPlayerError` with `code`, `message`, and `details`.
 
-`setSource()` can be called before attachment. The source is replayed when the
-platform view is created.
+`setSource()` and `setMedia()` can be called before attachment. The source is
+replayed when the platform view is created.
 
 ## API
 
@@ -217,6 +217,7 @@ player.
 ```dart
 VlcPlayerController({
   Uri? source,
+  VlcMediaSource? mediaSource,
   bool autoPlay = false,
   List<String> options = const <String>[],
   Map<String, String> httpHeaders = const <String, String>{},
@@ -226,6 +227,8 @@ VlcPlayerController({
 Constructor parameters:
 
 - `source`: Optional initial media URI.
+- `mediaSource`: Optional initial `VlcMediaSource` for headers, media options,
+  and a start position. Use either `source` or `mediaSource`.
 - `autoPlay`: Starts playback automatically after `source` is set.
 - `options`: VLC options passed to the native player when the platform view is
   created.
@@ -234,6 +237,8 @@ Constructor parameters:
 Methods:
 
 - `setSource(Uri source, {bool autoPlay = false, Map<String, String> httpHeaders = const <String, String>{}})`: Loads a new media URI.
+- `setMedia(VlcMediaSource source, {bool autoPlay = false})`: Loads a media URI
+  with HTTP headers, VLC media options, and an optional start position.
 - `play()`: Starts or resumes playback.
 - `pause()`: Pauses playback.
 - `stop()`: Stops playback.
@@ -254,6 +259,27 @@ Methods:
 Track methods return `VlcTrackDescription`. `getMediaInfo()` returns
 `VlcMediaInfo`, including title, artist, album, duration, and basic video,
 audio, and subtitle track details when VLC exposes them.
+
+### VlcMediaSource
+
+`VlcMediaSource` describes one media item before it is passed to VLC.
+
+```dart
+final source = VlcMediaSource(
+  uri: Uri.parse('https://example.com/video.mp4'),
+  httpHeaders: const <String, String>{
+    'Authorization': 'Bearer token',
+  },
+  mediaOptions: const <String>[
+    ':network-caching=1200',
+  ],
+  startPosition: const Duration(seconds: 30),
+);
+
+await controller.setMedia(source, autoPlay: true);
+```
+
+`uri` must be non-empty and `startPosition` must be non-negative.
 
 ### VlcPlayerValue
 

@@ -52,6 +52,8 @@ internal class VlcPlayerPlatformView(
     fun setSource(
         uri: String,
         httpHeaders: Map<String, String>,
+        mediaOptions: List<String>,
+        startPosition: Long,
         autoPlay: Boolean,
         result: MethodChannel.Result,
     ) {
@@ -65,6 +67,12 @@ internal class VlcPlayerPlatformView(
                 if (isValidHeader(name, value)) {
                     media.addOption(":http-header=$name: $value")
                 }
+            }
+            mediaOptions.forEach { option ->
+                media.addOption(option)
+            }
+            if (startPosition > 0L) {
+                media.addOption(":start-time=${startPosition / 1000.0}")
             }
             mediaPlayer.media = media
             media.release()

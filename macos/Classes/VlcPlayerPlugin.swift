@@ -65,7 +65,20 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       }
       let autoPlay = arguments["autoPlay"] as? Bool ?? false
       let httpHeaders = arguments["httpHeaders"] as? [String: String] ?? [:]
-      player.setSource(uri, httpHeaders: httpHeaders, autoPlay: autoPlay, result: result)
+      let mediaOptions = arguments["mediaOptions"] as? [String] ?? []
+      let startPosition = Self.intValue(arguments["startPosition"]) ?? 0
+      guard startPosition >= 0 else {
+        result(FlutterError(code: "invalid_args", message: "A non-negative startPosition is required.", details: nil))
+        return
+      }
+      player.setSource(
+        uri,
+        httpHeaders: httpHeaders,
+        mediaOptions: mediaOptions,
+        startPosition: startPosition,
+        autoPlay: autoPlay,
+        result: result
+      )
     case "play":
       player.play()
       result(nil)
@@ -228,7 +241,14 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     sendSnapshot()
   }
 
-  func setSource(_ uri: String, httpHeaders: [String: String], autoPlay: Bool, result: @escaping FlutterResult) {
+  func setSource(
+    _ uri: String,
+    httpHeaders: [String: String],
+    mediaOptions: [String],
+    startPosition: Int,
+    autoPlay: Bool,
+    result: @escaping FlutterResult
+  ) {
     guard let url = URL(string: uri) else {
       result(FlutterError(code: "invalid_uri", message: "The provided uri is invalid.", details: uri))
       return
@@ -237,6 +257,12 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     let media = VLCMedia(url: url)
     for (name, value) in httpHeaders where Self.isValidHeader(name: name, value: value) {
       media.addOption(":http-header=\(name): \(value)")
+    }
+    for option in mediaOptions {
+      media.addOption(option)
+    }
+    if startPosition > 0 {
+      media.addOption(":start-time=\(Double(startPosition) / 1000.0)")
     }
     mediaPlayer.media = media
     sendSnapshot(stateOverride: "opening")

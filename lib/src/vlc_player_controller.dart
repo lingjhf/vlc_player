@@ -4,24 +4,34 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'vlc_media_info.dart';
+import 'vlc_media_source.dart';
 import 'vlc_player_error.dart';
 import 'vlc_player_value.dart';
 
 class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   VlcPlayerController({
     Uri? source,
+    VlcMediaSource? mediaSource,
     this.autoPlay = false,
     List<String> options = const <String>[],
     Map<String, String> httpHeaders = const <String, String>{},
   }) : options = List<String>.unmodifiable(options),
-       httpHeaders = Map<String, String>.unmodifiable(httpHeaders),
+       httpHeaders = Map<String, String>.unmodifiable(
+         mediaSource?.httpHeaders ?? httpHeaders,
+       ),
        super(const VlcPlayerValue()) {
-    if (source != null && source.toString().isEmpty) {
-      throw ArgumentError.value(source, 'source', 'Must be non-empty.');
+    if (source != null && mediaSource != null) {
+      throw ArgumentError(
+        'Use either source or mediaSource, not both.',
+        'mediaSource',
+      );
     }
-    _pendingSource = source;
+    _pendingMediaSource =
+        mediaSource ??
+        (source == null
+            ? null
+            : VlcMediaSource(uri: source, httpHeaders: httpHeaders));
     _pendingAutoPlay = autoPlay;
-    _pendingHttpHeaders = this.httpHeaders;
   }
 
   static const String viewType = 'plugins.lingjhf.com/vlc_player/view';
@@ -35,9 +45,8 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
   int? _viewId;
   int? _textureId;
-  Uri? _pendingSource;
+  VlcMediaSource? _pendingMediaSource;
   bool _pendingAutoPlay = false;
-  Map<String, String> _pendingHttpHeaders = const <String, String>{};
   StreamSubscription<Object?>? _eventsSubscription;
   bool _isDisposed = false;
 
@@ -67,13 +76,9 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       'vlc_player/events/$viewId',
     ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
 
-    final pendingSource = _pendingSource;
-    if (pendingSource != null) {
-      await setSource(
-        pendingSource,
-        autoPlay: _pendingAutoPlay,
-        httpHeaders: _pendingHttpHeaders,
-      );
+    final pendingMediaSource = _pendingMediaSource;
+    if (pendingMediaSource != null) {
+      await setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
       _ensureNotDisposed();
     }
   }
@@ -121,13 +126,9 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       'vlc_player/events/$viewId',
     ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
 
-    final pendingSource = _pendingSource;
-    if (pendingSource != null) {
-      await setSource(
-        pendingSource,
-        autoPlay: _pendingAutoPlay,
-        httpHeaders: _pendingHttpHeaders,
-      );
+    final pendingMediaSource = _pendingMediaSource;
+    if (pendingMediaSource != null) {
+      await setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
       _ensureNotDisposed();
     }
 
@@ -151,14 +152,16 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     bool autoPlay = false,
     Map<String, String> httpHeaders = const <String, String>{},
   }) async {
+    return setMedia(
+      VlcMediaSource(uri: source, httpHeaders: httpHeaders),
+      autoPlay: autoPlay,
+    );
+  }
+
+  Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false}) async {
     _ensureNotDisposed();
-    final sourceValue = source.toString();
-    if (sourceValue.isEmpty) {
-      throw ArgumentError.value(source, 'source', 'Must be non-empty.');
-    }
-    _pendingSource = source;
+    _pendingMediaSource = source;
     _pendingAutoPlay = autoPlay;
-    _pendingHttpHeaders = Map<String, String>.unmodifiable(httpHeaders);
 
     final viewId = _viewId;
     if (viewId == null) {
@@ -167,9 +170,12 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
     await _invokeNative<void>('setSource', <String, Object?>{
       'viewId': viewId,
-      'uri': sourceValue,
+      'uri': source.uri.toString(),
       'autoPlay': autoPlay,
-      'httpHeaders': _pendingHttpHeaders,
+      'httpHeaders': source.httpHeaders,
+      if (source.mediaOptions.isNotEmpty) 'mediaOptions': source.mediaOptions,
+      if (source.startPosition > Duration.zero)
+        'startPosition': source.startPosition.inMilliseconds,
     });
   }
 

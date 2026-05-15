@@ -112,8 +112,84 @@ void main() {
       controller.dispose();
     });
 
+    test('setMedia before attach replays full source arguments', () async {
+      final controller = VlcPlayerController();
+
+      await controller.setMedia(
+        VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+          httpHeaders: const <String, String>{'Authorization': 'Bearer one'},
+          mediaOptions: const <String>[':network-caching=1200'],
+          startPosition: const Duration(seconds: 5),
+        ),
+        autoPlay: true,
+      );
+      expect(calls, isEmpty);
+
+      mockEventChannel(8);
+      await controller.attach(8);
+
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 8,
+        'uri': 'https://example.com/video.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{'Authorization': 'Bearer one'},
+        'mediaOptions': <String>[':network-caching=1200'],
+        'startPosition': 5000,
+      });
+
+      controller.dispose();
+    });
+
+    test(
+      'constructor accepts mediaSource and replays full source arguments',
+      () async {
+        final controller = VlcPlayerController(
+          mediaSource: VlcMediaSource(
+            uri: Uri.parse('https://example.com/video.mp4'),
+            httpHeaders: const <String, String>{'Authorization': 'Bearer one'},
+            mediaOptions: const <String>[':network-caching=1200'],
+            startPosition: const Duration(seconds: 5),
+          ),
+          autoPlay: true,
+        );
+
+        mockEventChannel(6);
+        await controller.attach(6);
+
+        expect(controller.httpHeaders, <String, String>{
+          'Authorization': 'Bearer one',
+        });
+        expect(calls.single.method, 'setSource');
+        expect(calls.single.arguments, <String, Object?>{
+          'viewId': 6,
+          'uri': 'https://example.com/video.mp4',
+          'autoPlay': true,
+          'httpHeaders': <String, String>{'Authorization': 'Bearer one'},
+          'mediaOptions': <String>[':network-caching=1200'],
+          'startPosition': 5000,
+        });
+
+        controller.dispose();
+      },
+    );
+
     test('constructor rejects empty source uri', () {
       expect(() => VlcPlayerController(source: Uri()), throwsArgumentError);
+      expect(calls, isEmpty);
+    });
+
+    test('constructor rejects source and mediaSource together', () {
+      expect(
+        () => VlcPlayerController(
+          source: Uri.parse('https://example.com/video.mp4'),
+          mediaSource: VlcMediaSource(
+            uri: Uri.parse('https://example.com/other.mp4'),
+          ),
+        ),
+        throwsA(isA<ArgumentError>()),
+      );
       expect(calls, isEmpty);
     });
 

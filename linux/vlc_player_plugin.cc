@@ -247,8 +247,11 @@ class LinuxVlcPlayer {
 
   std::string SetSource(const std::string& uri,
                         const std::vector<std::string>& headers,
+                        const std::vector<std::string>& media_options,
+                        int64_t start_position,
                         bool auto_play) {
-    const std::string error = core_->SetSource(uri, headers, false);
+    const std::string error =
+        core_->SetSource(uri, headers, media_options, start_position, false);
     SendSnapshot();
     if (!error.empty() || !auto_play) {
       return error;
@@ -548,8 +551,16 @@ static FlMethodResponse* handle_method(VlcPlayerPlugin* self,
 
   std::string error;
   if (strcmp(method, "setSource") == 0) {
+    int64_t start_position = 0;
+    if (ReadInt(arguments, "startPosition", &start_position) &&
+        start_position < 0) {
+      return error_response("invalid_args",
+                            "A non-negative startPosition is required.");
+    }
     error = player->SetSource(ReadString(arguments, "uri"),
                               ReadHeaders(arguments),
+                              ReadStringList(arguments, "mediaOptions"),
+                              start_position,
                               ReadBool(arguments, "autoPlay"));
     if (error == "A non-empty uri is required.") {
       return error_response("invalid_args", error);

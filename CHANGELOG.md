@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+## 0.4.0 - 2026-05-16
+
+### Added
+
+- Added `VlcMediaSource` and `VlcPlayerController.setMedia()` for loading media
+  with HTTP headers, VLC media options, and an initial start position.
+
+### Changed
+
+- Kept `setSource()` as the simple URI API and route it through the richer
+  media source flow.
+
 ## 0.3.0 - 2026-05-16
 
 ### Added

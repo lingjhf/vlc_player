@@ -56,11 +56,17 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val uri = call.argument<String>("uri")
                 val autoPlay = call.argument<Boolean>("autoPlay") == true
                 val httpHeaders = call.argument<Map<String, String>>("httpHeaders").orEmpty()
+                val mediaOptions = call.argument<List<String>>("mediaOptions").orEmpty()
+                val startPosition = call.argument<Number>("startPosition")?.toLong() ?: 0L
                 if (uri.isNullOrEmpty()) {
                     result.error("invalid_args", "A non-empty uri is required.", null)
                     return
                 }
-                player.setSource(uri, httpHeaders, autoPlay, result)
+                if (startPosition < 0L) {
+                    result.error("invalid_args", "A non-negative startPosition is required.", null)
+                    return
+                }
+                player.setSource(uri, httpHeaders, mediaOptions, startPosition, autoPlay, result)
             }
             "play" -> player.play(result)
             "pause" -> player.pause(result)
