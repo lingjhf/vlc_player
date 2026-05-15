@@ -10,12 +10,17 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   VlcPlayerController({
     Uri? source,
     this.autoPlay = false,
-    this.options = const <String>[],
-    this.httpHeaders = const <String, String>{},
-  }) : super(const VlcPlayerValue()) {
+    List<String> options = const <String>[],
+    Map<String, String> httpHeaders = const <String, String>{},
+  }) : options = List<String>.unmodifiable(options),
+       httpHeaders = Map<String, String>.unmodifiable(httpHeaders),
+       super(const VlcPlayerValue()) {
+    if (source != null && source.toString().isEmpty) {
+      throw ArgumentError.value(source, 'source', 'Must be non-empty.');
+    }
     _pendingSource = source;
     _pendingAutoPlay = autoPlay;
-    _pendingHttpHeaders = httpHeaders;
+    _pendingHttpHeaders = this.httpHeaders;
   }
 
   static const String viewType = 'plugins.lingjhf.com/vlc_player/view';
@@ -44,14 +49,19 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
 
     final oldViewId = _viewId;
+    _viewId = null;
+    _textureId = null;
     await _eventsSubscription?.cancel();
     _eventsSubscription = null;
     if (oldViewId != null) {
       await _disposeNativeView(oldViewId);
     }
+    if (_isDisposed) {
+      await _disposeNativeView(viewId);
+      throw StateError('The controller has been disposed.');
+    }
 
     _viewId = viewId;
-    _textureId = null;
     _eventsSubscription = EventChannel(
       'vlc_player/events/$viewId',
     ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
@@ -63,6 +73,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
         autoPlay: _pendingAutoPlay,
         httpHeaders: _pendingHttpHeaders,
       );
+      _ensureNotDisposed();
     }
   }
 
@@ -81,11 +92,14 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
 
     final oldViewId = _viewId;
+    _viewId = null;
+    _textureId = null;
     await _eventsSubscription?.cancel();
     _eventsSubscription = null;
     if (oldViewId != null) {
       await _disposeNativeView(oldViewId);
     }
+    _ensureNotDisposed();
 
     final response = await methodChannel.invokeMapMethod<String, Object?>(
       'create',
@@ -95,6 +109,10 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     final textureId = (response?['textureId'] as num?)?.toInt();
     if (viewId == null || textureId == null) {
       throw StateError('vlc_player texture creation returned invalid data.');
+    }
+    if (_isDisposed) {
+      await _disposeNativeView(viewId);
+      throw StateError('The controller has been disposed.');
     }
 
     _viewId = viewId;
@@ -110,6 +128,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
         autoPlay: _pendingAutoPlay,
         httpHeaders: _pendingHttpHeaders,
       );
+      _ensureNotDisposed();
     }
 
     return textureId;
@@ -133,6 +152,10 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     Map<String, String> httpHeaders = const <String, String>{},
   }) async {
     _ensureNotDisposed();
+    final sourceValue = source.toString();
+    if (sourceValue.isEmpty) {
+      throw ArgumentError.value(source, 'source', 'Must be non-empty.');
+    }
     _pendingSource = source;
     _pendingAutoPlay = autoPlay;
     _pendingHttpHeaders = Map<String, String>.unmodifiable(httpHeaders);
@@ -144,9 +167,9 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
     await methodChannel.invokeMethod<void>('setSource', <String, Object?>{
       'viewId': viewId,
-      'uri': source.toString(),
+      'uri': sourceValue,
       'autoPlay': autoPlay,
-      'httpHeaders': httpHeaders,
+      'httpHeaders': _pendingHttpHeaders,
     });
   }
 
@@ -172,8 +195,12 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   Future<void> setPlaybackSpeed(double speed) {
-    if (speed <= 0) {
-      throw ArgumentError.value(speed, 'speed', 'Must be greater than zero.');
+    if (!speed.isFinite || speed <= 0) {
+      throw ArgumentError.value(
+        speed,
+        'speed',
+        'Must be finite and greater than zero.',
+      );
     }
     return _invoke('setPlaybackSpeed', <String, Object?>{'speed': speed});
   }

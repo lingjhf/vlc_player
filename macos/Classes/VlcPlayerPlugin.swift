@@ -90,8 +90,8 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       player.setVolume(volume)
       result(nil)
     case "setPlaybackSpeed":
-      guard let speed = Self.doubleValue(arguments["speed"]), speed > 0 else {
-        result(FlutterError(code: "invalid_args", message: "A positive playback speed is required.", details: nil))
+      guard let speed = Self.doubleValue(arguments["speed"]), speed.isFinite && speed > 0 else {
+        result(FlutterError(code: "invalid_args", message: "A finite positive playback speed is required.", details: nil))
         return
       }
       player.setPlaybackSpeed(speed)
@@ -103,7 +103,10 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "invalid_args", message: "A non-negative audio track id is required.", details: nil))
         return
       }
-      player.setAudioTrack(id)
+      guard player.setAudioTrack(id) else {
+        result(FlutterError(code: "track_not_found", message: "Audio track \(id) was not found.", details: nil))
+        return
+      }
       result(nil)
     case "getSubtitleTracks":
       result(player.getSubtitleTracks())
@@ -112,7 +115,10 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
         result(FlutterError(code: "invalid_args", message: "A non-negative subtitle track id is required.", details: nil))
         return
       }
-      player.setSubtitleTrack(id)
+      guard player.setSubtitleTrack(id) else {
+        result(FlutterError(code: "track_not_found", message: "Subtitle track \(id) was not found.", details: nil))
+        return
+      }
       result(nil)
     case "disableSubtitle":
       player.disableSubtitle()
@@ -274,16 +280,24 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     return trackDescriptions(indexes: mediaPlayer.audioTrackIndexes, names: mediaPlayer.audioTrackNames)
   }
 
-  func setAudioTrack(_ id: Int) {
+  func setAudioTrack(_ id: Int) -> Bool {
+    guard trackIndexes(mediaPlayer.audioTrackIndexes).contains(id) else {
+      return false
+    }
     mediaPlayer.currentAudioTrackIndex = Int32(id)
+    return true
   }
 
   func getSubtitleTracks() -> [[String: Any?]] {
     return trackDescriptions(indexes: mediaPlayer.videoSubTitlesIndexes, names: mediaPlayer.videoSubTitlesNames)
   }
 
-  func setSubtitleTrack(_ id: Int) {
+  func setSubtitleTrack(_ id: Int) -> Bool {
+    guard trackIndexes(mediaPlayer.videoSubTitlesIndexes).contains(id) else {
+      return false
+    }
     mediaPlayer.currentVideoSubTitleIndex = Int32(id)
+    return true
   }
 
   func disableSubtitle() {
@@ -374,6 +388,10 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
         "language": nil,
       ]
     }
+  }
+
+  private func trackIndexes(_ indexes: [Any]?) -> Set<Int> {
+    return Set((indexes as? [NSNumber] ?? []).map(\.intValue))
   }
 
   private func mediaTracks(_ media: VLCMedia?, matching type: String) -> [[String: Any?]] {

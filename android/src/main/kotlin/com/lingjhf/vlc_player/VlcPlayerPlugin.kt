@@ -83,8 +83,8 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             }
             "setPlaybackSpeed" -> {
                 val speed = call.argument<Number>("speed")?.toFloat()
-                if (speed == null || speed <= 0.0f) {
-                    result.error("invalid_args", "A positive playback speed is required.", null)
+                if (speed == null || !speed.isFinite() || speed <= 0.0f) {
+                    result.error("invalid_args", "A finite positive playback speed is required.", null)
                     return
                 }
                 player.setPlaybackSpeed(speed, result)

@@ -19,10 +19,7 @@ concurrency:
 jobs:
   dart-and-android:
     name: Dart and Android
-    if: >
-      github.event_name != 'push' ||
-      (!startsWith(github.ref, 'refs/heads/linux/') &&
-       !startsWith(github.ref, 'refs/heads/windows/'))
+    if: ${{ !startsWith(github.head_ref || github.ref_name, 'linux/') && !startsWith(github.head_ref || github.ref_name, 'windows/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 90
 
@@ -83,10 +80,7 @@ jobs:
 
   apple:
     name: iOS and macOS
-    if: >
-      github.event_name != 'push' ||
-      (!startsWith(github.ref, 'refs/heads/linux/') &&
-       !startsWith(github.ref, 'refs/heads/windows/'))
+    if: ${{ !startsWith(github.head_ref || github.ref_name, 'linux/') && !startsWith(github.head_ref || github.ref_name, 'windows/') }}
     runs-on: macos-latest
     timeout-minutes: 90
 
@@ -133,7 +127,7 @@ jobs:
 
   windows:
     name: Windows
-    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/linux/')
+    if: ${{ !startsWith(github.head_ref || github.ref_name, 'linux/') }}
     runs-on: windows-latest
     timeout-minutes: 60
 
@@ -171,7 +165,7 @@ jobs:
 
   linux:
     name: Linux
-    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/windows/')
+    if: ${{ !startsWith(github.head_ref || github.ref_name, 'windows/') }}
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -182,7 +176,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libvlc-dev vlc xvfb
+          sudo apt-get install -y clang cmake libgtk-3-dev libvlc-dev ninja-build pkg-config vlc xvfb
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -213,4 +207,4 @@ jobs:
 
       - name: Run Linux integration tests
         working-directory: example
-        run: xvfb-run -a flutter drive --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/linux_smoke_test.dart
+        run: xvfb-run -a flutter drive --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart

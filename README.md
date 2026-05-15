@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.0.3
+  vlc_player: ^0.1.0
 ```
 
 If you are using this repository directly:
@@ -238,7 +238,7 @@ Methods:
 - `seekTo(Duration position)`: Seeks to a non-negative playback position.
 - `setVolume(int volume)`: Sets volume. Values are clamped to `0..200`.
 - `setPlaybackSpeed(double speed)`: Sets playback speed. The value must be
-  greater than zero.
+  finite and greater than zero.
 - `getAudioTracks()`: Returns available audio tracks.
 - `setAudioTrack(int id)`: Selects an audio track by VLC track id.
 - `getSubtitleTracks()`: Returns available embedded subtitle tracks.

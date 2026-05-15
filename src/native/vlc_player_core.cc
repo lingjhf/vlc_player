@@ -1,6 +1,7 @@
 #include "vlc_player_core.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <exception>
 #include <utility>
@@ -149,7 +150,10 @@ std::string VlcPlayerCore::SetPlaybackSpeed(double speed) {
   if (const auto error = ActiveError(); !error.empty()) {
     return error;
   }
-  player_->setRate(static_cast<float>(std::max(0.01, speed)));
+  if (!std::isfinite(speed) || speed <= 0) {
+    return "A finite positive playback speed is required.";
+  }
+  player_->setRate(static_cast<float>(speed));
   return "";
 }
 
@@ -220,7 +224,6 @@ VlcMediaInfo VlcPlayerCore::GetMediaInfo() {
     return info;
   }
 
-  media->parseWithOptions(VLC::Media::ParseFlags::Network, 1000);
   info.title = media->meta(libvlc_meta_Title);
   info.artist = media->meta(libvlc_meta_Artist);
   info.album = media->meta(libvlc_meta_Album);
@@ -276,7 +279,8 @@ bool VlcPlayerCore::CopyPixels(const uint8_t** out_buffer,
   if (render_buffer_.empty()) {
     return false;
   }
-  *out_buffer = render_buffer_.data();
+  texture_buffer_ = render_buffer_;
+  *out_buffer = texture_buffer_.data();
   *width = video_width_;
   *height = video_height_;
   return true;
@@ -342,6 +346,7 @@ void VlcPlayerCore::ResizeVideoBuffer(uint32_t width,
   video_height_ = height;
   frame_buffer_.assign(static_cast<size_t>(pitch) * height, 0);
   render_buffer_ = frame_buffer_;
+  texture_buffer_ = frame_buffer_;
 }
 
 std::string VlcPlayerCore::ActiveError() const {

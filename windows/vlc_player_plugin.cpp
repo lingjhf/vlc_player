@@ -17,6 +17,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <memory>
 #include <mutex>
@@ -610,8 +611,10 @@ void VlcPlayerPlugin::HandleMethodCall(
     error = player->SetVolume(static_cast<int>(volume));
   } else if (method_call.method_name() == "setPlaybackSpeed") {
     double speed = 0;
-    if (!ReadDouble(*arguments, "speed", &speed) || speed <= 0) {
-      result->Error("invalid_args", "A positive playback speed is required.");
+    if (!ReadDouble(*arguments, "speed", &speed) ||
+        !std::isfinite(speed) || speed <= 0) {
+      result->Error("invalid_args",
+                    "A finite positive playback speed is required.");
       return;
     }
     error = player->SetPlaybackSpeed(speed);

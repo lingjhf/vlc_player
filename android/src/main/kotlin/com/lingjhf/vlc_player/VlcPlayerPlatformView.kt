@@ -135,7 +135,11 @@ internal class VlcPlayerPlatformView(
         if (!ensureActive(result)) {
             return
         }
-        playbackSpeed = speed.coerceAtLeast(0.01f)
+        if (!speed.isFinite() || speed <= 0.0f) {
+            result.error("invalid_args", "A finite positive playback speed is required.", null)
+            return
+        }
+        playbackSpeed = speed
         mediaPlayer.rate = playbackSpeed
         sendSnapshot()
         result.success(null)
@@ -206,16 +210,15 @@ internal class VlcPlayerPlatformView(
             result.success(emptyMediaInfo())
             return
         }
+        result.success(mediaInfo(media, mediaPlayer.length))
+    }
 
-        if (!media.isParsed) {
-            media.parse(IMedia.Parse.ParseLocal or IMedia.Parse.ParseNetwork)
-        }
-
+    private fun mediaInfo(media: IMedia, playerLength: Long): Map<String, Any?> {
         val info = HashMap<String, Any?>()
         info["title"] = media.getMeta(IMedia.Meta.Title)
         info["artist"] = media.getMeta(IMedia.Meta.Artist)
         info["album"] = media.getMeta(IMedia.Meta.Album)
-        info["duration"] = maxOf(media.duration, mediaPlayer.length, 0L)
+        info["duration"] = maxOf(media.duration, playerLength, 0L)
 
         val videoTracks = ArrayList<Map<String, Any?>>()
         val audioTracks = ArrayList<Map<String, Any?>>()
@@ -232,7 +235,7 @@ internal class VlcPlayerPlatformView(
         info["videoTracks"] = videoTracks
         info["audioTracks"] = audioTracks
         info["subtitleTracks"] = subtitleTracks
-        result.success(info)
+        return info
     }
 
     override fun onFlutterViewAttached(flutterView: View) {

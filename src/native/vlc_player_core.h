@@ -79,6 +79,7 @@ class VlcPlayerCore {
   mutable std::mutex video_mutex_;
   std::vector<uint8_t> frame_buffer_;
   std::vector<uint8_t> render_buffer_;
+  std::vector<uint8_t> texture_buffer_;
   uint32_t video_width_ = 0;
   uint32_t video_height_ = 0;
 

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player/vlc_player.dart';
@@ -85,6 +87,132 @@ void main() {
 
       controller.dispose();
     });
+
+    test('pending source keeps an immutable headers snapshot', () async {
+      final controller = VlcPlayerController();
+      final headers = <String, String>{'Authorization': 'Bearer one'};
+
+      await controller.setSource(
+        Uri.parse('https://example.com/video.mp4'),
+        httpHeaders: headers,
+      );
+      headers['Authorization'] = 'Bearer two';
+
+      mockEventChannel(10);
+      await controller.attach(10);
+
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 10,
+        'uri': 'https://example.com/video.mp4',
+        'autoPlay': false,
+        'httpHeaders': <String, String>{'Authorization': 'Bearer one'},
+      });
+
+      controller.dispose();
+    });
+
+    test('constructor rejects empty source uri', () {
+      expect(() => VlcPlayerController(source: Uri()), throwsArgumentError);
+      expect(calls, isEmpty);
+    });
+
+    test('constructor keeps immutable options and headers snapshots', () async {
+      final options = <String>['--network-caching=1000'];
+      final headers = <String, String>{'Authorization': 'Bearer one'};
+      final controller = VlcPlayerController(
+        source: Uri.parse('https://example.com/video.mp4'),
+        autoPlay: true,
+        options: options,
+        httpHeaders: headers,
+      );
+
+      options.add('--file-caching=1000');
+      headers['Authorization'] = 'Bearer two';
+
+      expect(
+        () => controller.options.add('--no-video-title-show'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(
+        () => controller.httpHeaders['X-Test'] = 'value',
+        throwsA(isA<UnsupportedError>()),
+      );
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'create') {
+              mockEventChannel(11);
+              return <String, Object?>{'viewId': 11, 'textureId': 91};
+            }
+            return null;
+          });
+
+      await controller.attachTexturePlayer();
+
+      expect(calls.map((call) => call.method), <String>['create', 'setSource']);
+      expect(calls[0].arguments, <String, Object?>{
+        'options': <String>['--network-caching=1000'],
+      });
+      expect(calls[1].arguments, <String, Object?>{
+        'viewId': 11,
+        'uri': 'https://example.com/video.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{'Authorization': 'Bearer one'},
+      });
+
+      controller.dispose();
+    });
+
+    test('empty source uri fails before reaching native code', () async {
+      final controller = VlcPlayerController();
+
+      expect(() => controller.setSource(Uri()), throwsArgumentError);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test(
+      'attach disposes the new platform view if disposed while replacing old view',
+      () async {
+        final controller = VlcPlayerController();
+        mockEventChannel(41);
+        await controller.attach(41);
+
+        final oldDisposeStarted = Completer<void>();
+        final oldDisposeCompleter = Completer<void>();
+        calls.clear();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              final arguments = call.arguments as Map<Object?, Object?>;
+              if (call.method == 'dispose' && arguments['viewId'] == 41) {
+                oldDisposeStarted.complete();
+                await oldDisposeCompleter.future;
+              }
+              return null;
+            });
+
+        final attach = controller.attach(42);
+        await oldDisposeStarted.future;
+        controller.dispose();
+        oldDisposeCompleter.complete();
+
+        await expectLater(attach, throwsStateError);
+        expect(calls.map((call) => call.method), <String>[
+          'dispose',
+          'dispose',
+        ]);
+        expect(calls[0].arguments, <String, Object?>{'viewId': 41});
+        expect(calls[1].arguments, <String, Object?>{'viewId': 42});
+      },
+    );
   });
 
   group('platform view lifecycle', () {
@@ -142,6 +270,37 @@ void main() {
 
       controller.dispose();
     });
+
+    test(
+      'attachTexturePlayer releases native player if disposed during create',
+      () async {
+        final controller = VlcPlayerController();
+        final createStarted = Completer<void>();
+        final createCompleter = Completer<void>();
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (call.method == 'create') {
+                createStarted.complete();
+                await createCompleter.future;
+                return <String, Object?>{'viewId': 24, 'textureId': 102};
+              }
+              return null;
+            });
+
+        final attach = controller.attachTexturePlayer();
+        await createStarted.future;
+        controller.dispose();
+        createCompleter.complete();
+
+        await expectLater(attach, throwsStateError);
+        expect(calls.map((call) => call.method), <String>['create', 'dispose']);
+        expect(calls.last.arguments, <String, Object?>{'viewId': 24});
+      },
+    );
 
     test('detach releases a texture backed player', () async {
       final controller = VlcPlayerController();
@@ -302,6 +461,27 @@ void main() {
 
       controller.dispose();
     });
+
+    test(
+      'non-finite playback speeds fail before reaching native code',
+      () async {
+        final controller = VlcPlayerController();
+        mockEventChannel(14);
+        await controller.attach(14);
+
+        expect(
+          () => controller.setPlaybackSpeed(double.nan),
+          throwsArgumentError,
+        );
+        expect(
+          () => controller.setPlaybackSpeed(double.infinity),
+          throwsArgumentError,
+        );
+        expect(calls, isEmpty);
+
+        controller.dispose();
+      },
+    );
   });
 
   group('tracks and media info', () {
@@ -364,6 +544,28 @@ void main() {
       await controller.attach(33);
 
       expect(() => controller.setAudioTrack(-1), throwsArgumentError);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('subtitle track selection rejects negative ids', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(36);
+      await controller.attach(36);
+
+      expect(() => controller.setSubtitleTrack(-1), throwsArgumentError);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('empty subtitle uri fails before reaching native code', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(37);
+      await controller.attach(37);
+
+      expect(() => controller.addSubtitle(Uri()), throwsArgumentError);
       expect(calls, isEmpty);
 
       controller.dispose();

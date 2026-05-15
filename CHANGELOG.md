@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+## 0.1.0 - 2026-05-16
+
+### Changed
+
+- Hardened controller and native player lifecycle handling when widgets are
+  detached, replaced, or disposed during async attachment.
+- Strengthened release and CI validation so Android, iOS, macOS, Windows, and
+  Linux run real plugin integration tests.
+
+### Fixed
+
+- Rejected empty media URIs and non-finite playback speeds before they reach
+  native VLC code.
+- Returned `track_not_found` errors for missing iOS and macOS audio/subtitle
+  track ids.
+
 ## 0.0.4 - 2026-05-16
 
 ### Added

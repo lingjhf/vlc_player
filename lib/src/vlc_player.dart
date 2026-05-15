@@ -22,30 +22,37 @@ class VlcPlayer extends StatefulWidget {
 
 class _VlcPlayerState extends State<VlcPlayer> {
   Future<int>? _textureId;
+  int _textureGeneration = 0;
+  bool _isDisposed = false;
 
   @override
   void initState() {
     super.initState();
     if (_usesTexturePlayer) {
-      _textureId = widget.controller.attachTexturePlayer();
+      _textureId = _attachTexturePlayer(widget.controller);
     }
   }
 
   @override
   void didUpdateWidget(VlcPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (!_usesTexturePlayer || oldWidget.controller == widget.controller) {
+    if (oldWidget.controller == widget.controller) {
       return;
     }
-    unawaited(oldWidget.controller.detach());
-    _textureId = widget.controller.attachTexturePlayer();
+
+    if (_usesTexturePlayer) {
+      _textureId = _attachTexturePlayer(widget.controller);
+      unawaited(oldWidget.controller.detach());
+    } else {
+      unawaited(oldWidget.controller.detach());
+    }
   }
 
   @override
   void dispose() {
-    if (_usesTexturePlayer) {
-      unawaited(widget.controller.detach());
-    }
+    _isDisposed = true;
+    _textureGeneration++;
+    unawaited(widget.controller.detach());
     super.dispose();
   }
 
@@ -60,12 +67,13 @@ class _VlcPlayerState extends State<VlcPlayer> {
       return ColoredBox(
         color: widget.backgroundColor,
         child: AndroidView(
+          key: ValueKey<VlcPlayerController>(widget.controller),
           viewType: VlcPlayerController.viewType,
           creationParams: <String, Object?>{
             'options': widget.controller.options,
           },
           creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: widget.controller.attach,
+          onPlatformViewCreated: _handlePlatformViewCreated,
         ),
       );
     }
@@ -74,12 +82,13 @@ class _VlcPlayerState extends State<VlcPlayer> {
       return ColoredBox(
         color: widget.backgroundColor,
         child: UiKitView(
+          key: ValueKey<VlcPlayerController>(widget.controller),
           viewType: VlcPlayerController.viewType,
           creationParams: <String, Object?>{
             'options': widget.controller.options,
           },
           creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: widget.controller.attach,
+          onPlatformViewCreated: _handlePlatformViewCreated,
         ),
       );
     }
@@ -122,11 +131,27 @@ class _VlcPlayerState extends State<VlcPlayer> {
     return ColoredBox(
       color: widget.backgroundColor,
       child: AppKitView(
+        key: ValueKey<VlcPlayerController>(widget.controller),
         viewType: VlcPlayerController.viewType,
         creationParams: <String, Object?>{'options': widget.controller.options},
         creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: widget.controller.attach,
+        onPlatformViewCreated: _handlePlatformViewCreated,
       ),
     );
+  }
+
+  void _handlePlatformViewCreated(int viewId) {
+    unawaited(widget.controller.attach(viewId));
+  }
+
+  Future<int> _attachTexturePlayer(VlcPlayerController controller) async {
+    final generation = ++_textureGeneration;
+    final textureId = await controller.attachTexturePlayer();
+    if (_isDisposed ||
+        generation != _textureGeneration ||
+        widget.controller != controller) {
+      await controller.detach();
+    }
+    return textureId;
   }
 }
