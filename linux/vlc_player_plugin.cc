@@ -388,6 +388,24 @@ class LinuxVlcPlayer {
     fl_value_set_string_take(event, "volume", fl_value_new_int(snapshot.volume));
     fl_value_set_string_take(event, "playbackSpeed",
                              fl_value_new_float(snapshot.playback_speed));
+    fl_value_set_string_take(event, "isReady",
+                             fl_value_new_bool(snapshot.is_ready));
+    fl_value_set_string_take(event, "isSeekable",
+                             fl_value_new_bool(snapshot.is_seekable));
+    fl_value_set_string_take(event, "isLive",
+                             fl_value_new_bool(snapshot.is_live));
+    if (snapshot.video_width > 0 && snapshot.video_height > 0) {
+      FlValue* video_size = fl_value_new_map();
+      fl_value_set_string_take(video_size, "width",
+                               fl_value_new_int(snapshot.video_width));
+      fl_value_set_string_take(video_size, "height",
+                               fl_value_new_int(snapshot.video_height));
+      fl_value_set_string_take(event, "videoSize", video_size);
+    }
+    if (snapshot.buffering_progress >= 0.0) {
+      fl_value_set_string_take(event, "bufferingProgress",
+                               fl_value_new_float(snapshot.buffering_progress));
+    }
     if (!snapshot.error_description.empty()) {
       fl_value_set_string_take(event, "errorDescription",
                                fl_value_new_string(snapshot.error_description.c_str()));

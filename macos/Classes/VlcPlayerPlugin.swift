@@ -358,13 +358,22 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       return
     }
 
+    let stateName = stateOverride ?? Self.stateName(mediaPlayer.state)
+    let duration = Self.milliseconds(from: mediaPlayer.media?.length)
+    let isSeekable = mediaPlayer.isSeekable
     var event: [String: Any] = [
-      "state": stateOverride ?? Self.stateName(mediaPlayer.state),
+      "state": stateName,
       "position": Self.milliseconds(from: mediaPlayer.time),
-      "duration": Self.milliseconds(from: mediaPlayer.media?.length),
+      "duration": duration,
       "volume": Int(mediaPlayer.audio?.volume ?? 0),
       "playbackSpeed": Double(mediaPlayer.rate),
+      "isReady": Self.isReadyState(stateName),
+      "isSeekable": isSeekable,
+      "isLive": Self.isLiveState(stateName) && duration == 0 && !isSeekable,
     ]
+    if let videoSize = Self.videoSizeMap(mediaPlayer.videoSize) {
+      event["videoSize"] = videoSize
+    }
     if let errorDescription {
       event["errorDescription"] = errorDescription
     }
@@ -376,6 +385,15 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       return 0
     }
     return max(0, Int(time.intValue))
+  }
+
+  private static func videoSizeMap(_ size: CGSize) -> [String: Int]? {
+    let width = Int(size.width)
+    let height = Int(size.height)
+    guard width > 0 && height > 0 else {
+      return nil
+    }
+    return ["width": width, "height": height]
   }
 
   private func trackDescriptions(indexes: [Any]?, names: [Any]?) -> [[String: Any?]] {
@@ -454,6 +472,19 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     default:
       return "idle"
     }
+  }
+
+  private static func isReadyState(_ state: String) -> Bool {
+    return state == "playing" ||
+      state == "paused" ||
+      state == "stopped" ||
+      state == "ended"
+  }
+
+  private static func isLiveState(_ state: String) -> Bool {
+    return state == "buffering" ||
+      state == "playing" ||
+      state == "paused"
   }
 
   private static func isValidHeader(name: String, value: String) -> Bool {

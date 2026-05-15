@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.1.0
+  vlc_player: ^0.2.0
 ```
 
 If you are using this repository directly:
@@ -264,6 +264,14 @@ Fields:
 - `duration`: Media duration.
 - `volume`: Current volume.
 - `playbackSpeed`: Current playback speed.
+- `isReady`: Whether the native player has reached a playable terminal or
+  active playback state.
+- `isSeekable`: Whether VLC reports the current media as seekable.
+- `isLive`: Whether the current media looks like a non-seekable stream without a
+  fixed duration.
+- `videoSize`: Current decoded video size when VLC exposes it.
+- `bufferingProgress`: Normalized buffering progress from `0.0` to `1.0` when
+  the platform exposes it; otherwise `null`.
 - `errorDescription`: Native playback error text, when available.
 
 Convenience getters:

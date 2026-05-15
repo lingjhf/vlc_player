@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-05-16
+
+### Added
+
+- Added readiness, seekability, live stream detection, decoded video size, and
+  buffering progress fields to `VlcPlayerValue`.
+- Surfaced the new playback status fields from Android, iOS, macOS, Windows,
+  and Linux native players.
+
+### Changed
+
+- Updated the full player example to show loading state and disable seeking for
+  non-seekable or live streams.
+
 ## 0.1.0 - 2026-05-16
 
 ### Changed

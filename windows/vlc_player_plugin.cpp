@@ -440,6 +440,21 @@ class WindowsVlcPlayer {
     event[EncodableValue("volume")] = EncodableValue(snapshot.volume);
     event[EncodableValue("playbackSpeed")] =
         EncodableValue(snapshot.playback_speed);
+    event[EncodableValue("isReady")] = EncodableValue(snapshot.is_ready);
+    event[EncodableValue("isSeekable")] = EncodableValue(snapshot.is_seekable);
+    event[EncodableValue("isLive")] = EncodableValue(snapshot.is_live);
+    if (snapshot.video_width > 0 && snapshot.video_height > 0) {
+      EncodableMap video_size;
+      video_size[EncodableValue("width")] =
+          EncodableValue(snapshot.video_width);
+      video_size[EncodableValue("height")] =
+          EncodableValue(snapshot.video_height);
+      event[EncodableValue("videoSize")] = EncodableValue(video_size);
+    }
+    if (snapshot.buffering_progress >= 0.0) {
+      event[EncodableValue("bufferingProgress")] =
+          EncodableValue(snapshot.buffering_progress);
+    }
     if (!snapshot.error_description.empty()) {
       event[EncodableValue("errorDescription")] =
           EncodableValue(snapshot.error_description);

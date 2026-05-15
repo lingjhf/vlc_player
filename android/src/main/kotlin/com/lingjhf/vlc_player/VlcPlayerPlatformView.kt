@@ -34,6 +34,7 @@ internal class VlcPlayerPlatformView(
     private var state = STATE_IDLE
     private var volume = 100
     private var playbackSpeed = 1.0f
+    private var bufferingProgress: Double? = null
     private var errorDescription: String? = null
     private var viewsAttached = false
     private var disposed = false
@@ -263,32 +264,57 @@ internal class VlcPlayerPlatformView(
     }
 
     override fun onEvent(event: MediaPlayer.Event) {
-        val eventType = event.type
         if (Looper.myLooper() == Looper.getMainLooper()) {
-            handlePlayerEvent(eventType)
+            handlePlayerEvent(event)
         } else {
-            mainHandler.post { handlePlayerEvent(eventType) }
+            mainHandler.post { handlePlayerEvent(event) }
         }
     }
 
-    private fun handlePlayerEvent(eventType: Int) {
+    private fun handlePlayerEvent(event: MediaPlayer.Event) {
         if (disposed) {
             return
         }
 
-        when (eventType) {
-            MediaPlayer.Event.Opening -> updateState(STATE_OPENING)
-            MediaPlayer.Event.Buffering -> updateState(STATE_BUFFERING)
-            MediaPlayer.Event.Playing -> updateState(STATE_PLAYING)
-            MediaPlayer.Event.Paused -> updateState(STATE_PAUSED)
-            MediaPlayer.Event.Stopped -> updateState(STATE_STOPPED)
-            MediaPlayer.Event.EndReached -> updateState(STATE_ENDED)
+        when (event.type) {
+            MediaPlayer.Event.Opening -> {
+                bufferingProgress = null
+                updateState(STATE_OPENING)
+            }
+            MediaPlayer.Event.Buffering -> {
+                bufferingProgress =
+                    event.getBuffering().coerceIn(0.0f, 100.0f).toDouble() / 100.0
+                updateState(STATE_BUFFERING)
+            }
+            MediaPlayer.Event.Playing -> {
+                bufferingProgress = null
+                updateState(STATE_PLAYING)
+            }
+            MediaPlayer.Event.Paused -> {
+                bufferingProgress = null
+                updateState(STATE_PAUSED)
+            }
+            MediaPlayer.Event.Stopped -> {
+                bufferingProgress = null
+                updateState(STATE_STOPPED)
+            }
+            MediaPlayer.Event.EndReached -> {
+                bufferingProgress = null
+                updateState(STATE_ENDED)
+            }
             MediaPlayer.Event.EncounteredError -> {
+                bufferingProgress = null
                 errorDescription = "VLC encountered an error while playing the media."
                 updateState(STATE_ERROR)
             }
             MediaPlayer.Event.TimeChanged,
+            MediaPlayer.Event.PositionChanged,
             MediaPlayer.Event.LengthChanged,
+            MediaPlayer.Event.SeekableChanged,
+            MediaPlayer.Event.Vout,
+            MediaPlayer.Event.ESAdded,
+            MediaPlayer.Event.ESDeleted,
+            MediaPlayer.Event.ESSelected,
             -> sendSnapshot()
         }
     }
@@ -375,16 +401,37 @@ internal class VlcPlayerPlatformView(
             return
         }
 
-        val event = HashMap<String, Any>()
+        val duration = mediaPlayer.length.coerceAtLeast(0L)
+        val isSeekable = mediaPlayer.isSeekable
+        val event = HashMap<String, Any?>()
         event["state"] = state
         event["position"] = mediaPlayer.time.coerceAtLeast(0L)
-        event["duration"] = mediaPlayer.length.coerceAtLeast(0L)
+        event["duration"] = duration
         event["volume"] = volume
         event["playbackSpeed"] = playbackSpeed.toDouble()
+        event["isReady"] = isReadyState(state)
+        event["isSeekable"] = isSeekable
+        event["isLive"] = isLiveState(state) && duration == 0L && !isSeekable
+        videoSize()?.let {
+            event["videoSize"] = it
+        }
+        bufferingProgress?.let {
+            event["bufferingProgress"] = it
+        }
         errorDescription?.let {
             event["errorDescription"] = it
         }
         streamHandler.send(event)
+    }
+
+    private fun videoSize(): Map<String, Int>? {
+        val track = mediaPlayer.currentVideoTrack ?: return null
+        val width = track.width
+        val height = track.height
+        if (width <= 0 || height <= 0) {
+            return null
+        }
+        return mapOf("width" to width, "height" to height)
     }
 
     private inner class StreamHandler : EventChannel.StreamHandler {
@@ -399,7 +446,7 @@ internal class VlcPlayerPlatformView(
             events = null
         }
 
-        fun send(event: Map<String, Any>) {
+        fun send(event: Map<String, Any?>) {
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 sendOnMainThread(event)
             } else {
@@ -407,7 +454,7 @@ internal class VlcPlayerPlatformView(
             }
         }
 
-        private fun sendOnMainThread(event: Map<String, Any>) {
+        private fun sendOnMainThread(event: Map<String, Any?>) {
             if (!disposed) {
                 events?.success(event)
             }
@@ -423,5 +470,18 @@ internal class VlcPlayerPlatformView(
         const val STATE_STOPPED = "stopped"
         const val STATE_ENDED = "ended"
         const val STATE_ERROR = "error"
+
+        fun isReadyState(state: String): Boolean {
+            return state == STATE_PLAYING ||
+                state == STATE_PAUSED ||
+                state == STATE_STOPPED ||
+                state == STATE_ENDED
+        }
+
+        fun isLiveState(state: String): Boolean {
+            return state == STATE_BUFFERING ||
+                state == STATE_PLAYING ||
+                state == STATE_PAUSED
+        }
     }
 }

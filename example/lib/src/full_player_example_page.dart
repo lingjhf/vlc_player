@@ -57,6 +57,16 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
                       ),
                     ),
                   ),
+                  if (_showsLoading(value))
+                    Center(
+                      child: SizedBox.square(
+                        dimension: 44,
+                        child: CircularProgressIndicator(
+                          value: value.bufferingProgress,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
                   Positioned(
                     left: 8,
                     top: 8,
@@ -88,7 +98,8 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
                           _dragValue = value;
                         });
                       },
-                      onSeekEnd: (value) => unawaited(_seekTo(value)),
+                      onSeekEnd: (seconds) =>
+                          unawaited(_seekTo(seconds, value)),
                       onToggleOrientation: () =>
                           unawaited(_toggleOrientation()),
                     ),
@@ -133,7 +144,17 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
     return _wantsPlaying;
   }
 
-  Future<void> _seekTo(double seconds) async {
+  bool _showsLoading(VlcPlayerValue value) {
+    return widget.showPlayer &&
+        _controller.isAttached &&
+        !value.isReady &&
+        !value.hasError;
+  }
+
+  Future<void> _seekTo(double seconds, VlcPlayerValue value) async {
+    if (!value.isReady || !value.isSeekable || value.isLive) {
+      return;
+    }
     final target = Duration(milliseconds: (seconds * 1000).round());
     setState(() {
       _dragValue = seconds;
@@ -237,11 +258,18 @@ class _PlayerControls extends StatelessWidget {
   Widget build(BuildContext context) {
     final durationSeconds = value.duration.inMilliseconds / 1000;
     final positionSeconds = value.position.inMilliseconds / 1000;
-    final maxSeconds = durationSeconds > 0 ? durationSeconds : 1.0;
-    final sliderValue = (seekValue ?? positionSeconds).clamp(0.0, maxSeconds);
+    final canSeek =
+        canControl && value.isReady && value.isSeekable && !value.isLive;
+    final maxSeconds = canSeek && durationSeconds > 0 ? durationSeconds : 1.0;
+    final sliderValue = canSeek
+        ? (seekValue ?? positionSeconds).clamp(0.0, maxSeconds)
+        : 0.0;
     final displayedPosition = Duration(
-      milliseconds: (sliderValue * 1000).round(),
+      milliseconds: ((canSeek ? sliderValue : positionSeconds) * 1000).round(),
     );
+    final durationLabel = value.isLive
+        ? 'LIVE'
+        : _formatDuration(value.duration);
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -263,9 +291,9 @@ class _PlayerControls extends StatelessWidget {
               key: const ValueKey<String>('full-player-seek-slider'),
               value: sliderValue,
               max: maxSeconds,
-              onChangeStart: canControl ? onSeekStart : null,
-              onChanged: canControl ? onSeekChanged : null,
-              onChangeEnd: canControl ? onSeekEnd : null,
+              onChangeStart: canSeek ? onSeekStart : null,
+              onChanged: canSeek ? onSeekChanged : null,
+              onChangeEnd: canSeek ? onSeekEnd : null,
             ),
             Row(
               children: <Widget>[
@@ -278,7 +306,7 @@ class _PlayerControls extends StatelessWidget {
                   tooltip: isPlaying ? 'Pause' : 'Play',
                 ),
                 Text(
-                  '${_formatDuration(displayedPosition)} / ${_formatDuration(value.duration)}',
+                  '${_formatDuration(displayedPosition)} / $durationLabel',
                   style: const TextStyle(color: Colors.white),
                 ),
                 const Spacer(),

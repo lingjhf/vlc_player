@@ -64,6 +64,8 @@ class VlcPlayerCore {
   std::string ActiveError() const;
 
   static std::string StateName(libvlc_state_t state);
+  static bool IsReadyState(const std::string& state);
+  static bool IsLiveState(const std::string& state);
   static std::string FourCCString(uint32_t value);
   static std::string TrackTypeName(VLC::MediaTrack::Type type);
   static VlcMediaTrackInfo MediaTrackInfo(const VLC::MediaTrack& track);

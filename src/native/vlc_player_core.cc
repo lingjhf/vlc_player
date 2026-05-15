@@ -269,6 +269,15 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   snapshot.position = NonNegative(player_->time());
   snapshot.duration = NonNegative(player_->length());
   snapshot.playback_speed = static_cast<double>(player_->rate());
+  snapshot.is_ready = IsReadyState(snapshot.state);
+  snapshot.is_seekable = player_->isSeekable();
+  snapshot.is_live = IsLiveState(snapshot.state) && snapshot.duration == 0 &&
+                     !snapshot.is_seekable;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    snapshot.video_width = video_width_;
+    snapshot.video_height = video_height_;
+  }
   return snapshot;
 }
 
@@ -381,6 +390,15 @@ std::string VlcPlayerCore::StateName(libvlc_state_t state) {
     default:
       return "idle";
   }
+}
+
+bool VlcPlayerCore::IsReadyState(const std::string& state) {
+  return state == "playing" || state == "paused" || state == "stopped" ||
+         state == "ended";
+}
+
+bool VlcPlayerCore::IsLiveState(const std::string& state) {
+  return state == "buffering" || state == "playing" || state == "paused";
 }
 
 std::string VlcPlayerCore::FourCCString(uint32_t value) {
