@@ -63,6 +63,9 @@ jobs:
         working-directory: example
         run: flutter test test/widget_test.dart
 
+      - name: Validate pub.dev package
+        run: flutter pub publish --dry-run
+
       - name: Build Android example
         working-directory: example
         run: flutter build apk --debug
@@ -78,9 +81,6 @@ jobs:
       - name: Run macOS integration tests
         working-directory: example
         run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
-
-      - name: Validate pub.dev package
-        run: flutter pub publish --dry-run
 
   validate-windows:
     name: Validate Windows release
