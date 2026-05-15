@@ -111,13 +111,16 @@ if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" AND
     PARENT_SCOPE
   )
 
-  foreach(vlc_player_runtime_directory hrtfs locale lua plugins skins)
-    if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}")
-      install(DIRECTORY "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}"
-        DESTINATION "."
-        COMPONENT Runtime)
-    endif()
-  endforeach()
+  if(DEFINED BINARY_NAME)
+    foreach(vlc_player_runtime_directory hrtfs locale lua plugins skins)
+      if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}")
+        add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+          COMMAND "${CMAKE_COMMAND}" -E copy_directory
+          "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}"
+          "$<TARGET_FILE_DIR:${BINARY_NAME}>/${vlc_player_runtime_directory}")
+      endif()
+    endforeach()
+  endif()
 else()
   message(FATAL_ERROR
     "Incomplete downloaded VLC Windows runtime in ${VLC_PLAYER_RUNTIME_DIR}. "
