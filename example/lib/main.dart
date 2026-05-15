@@ -9,20 +9,39 @@ void main() {
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key, this.showPlayer = true});
+  const MyApp({
+    super.key,
+    this.showPlayer = true,
+    this.videoSource,
+    this.hlsSource,
+  });
 
   final bool showPlayer;
+  final Uri? videoSource;
+  final Uri? hlsSource;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(home: _ExampleListPage(showPlayer: showPlayer));
+    return MaterialApp(
+      home: _ExampleListPage(
+        showPlayer: showPlayer,
+        videoSource: videoSource,
+        hlsSource: hlsSource,
+      ),
+    );
   }
 }
 
 class _ExampleListPage extends StatelessWidget {
-  const _ExampleListPage({required this.showPlayer});
+  const _ExampleListPage({
+    required this.showPlayer,
+    required this.videoSource,
+    required this.hlsSource,
+  });
 
   final bool showPlayer;
+  final Uri? videoSource;
+  final Uri? hlsSource;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +57,10 @@ class _ExampleListPage extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => VideoExamplePage(showPlayer: showPlayer),
+                  builder: (_) => VideoExamplePage(
+                    showPlayer: showPlayer,
+                    source: videoSource,
+                  ),
                 ),
               );
             },
@@ -51,7 +73,8 @@ class _ExampleListPage extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => HlsExamplePage(showPlayer: showPlayer),
+                  builder: (_) =>
+                      HlsExamplePage(showPlayer: showPlayer, source: hlsSource),
                 ),
               );
             },

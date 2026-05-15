@@ -11,6 +11,7 @@ for loading media, playback controls, seeking, volume, speed, and state updates.
 - iOS
 - macOS
 - Windows
+- Linux
 
 The plugin forwards media URIs to the native VLC library. It does not keep a
 Dart-side format allowlist or parse playlists in Dart.
@@ -104,6 +105,23 @@ first time the runtime is downloaded.
 
 Windows video is rendered through a Flutter texture backed by libVLC video
 callbacks, so the Dart API is the same as the other platforms.
+The native Windows implementation uses the vendored official `libvlcpp`
+header-only bindings and links against the VLC SDK import library from the
+downloaded runtime archive.
+
+### Linux
+
+The Linux implementation links against the system libVLC package through
+pkg-config. Install VLC development files before building a Linux app:
+
+```sh
+sudo apt install libvlc-dev vlc
+```
+
+Linux video is rendered through a Flutter texture backed by libVLC video
+callbacks, so the Dart API is the same as the other desktop platforms.
+The native Linux implementation uses the vendored official `libvlcpp`
+header-only bindings and links against the system `libvlc` package.
 
 ## Usage
 
@@ -221,7 +239,19 @@ Methods:
 - `setVolume(int volume)`: Sets volume. Values are clamped to `0..200`.
 - `setPlaybackSpeed(double speed)`: Sets playback speed. The value must be
   greater than zero.
+- `getAudioTracks()`: Returns available audio tracks.
+- `setAudioTrack(int id)`: Selects an audio track by VLC track id.
+- `getSubtitleTracks()`: Returns available embedded subtitle tracks.
+- `setSubtitleTrack(int id)`: Selects an embedded subtitle track by VLC track
+  id.
+- `disableSubtitle()`: Disables subtitle rendering.
+- `addSubtitle(Uri uri)`: Adds an external subtitle file or URL and selects it.
+- `getMediaInfo()`: Returns basic metadata and discovered media tracks.
 - `dispose()`: Releases the native player attached to this controller.
+
+Track methods return `VlcTrackDescription`. `getMediaInfo()` returns
+`VlcMediaInfo`, including title, artist, album, duration, and basic video,
+audio, and subtitle track details when VLC exposes them.
 
 ### VlcPlayerValue
 
@@ -303,6 +333,7 @@ Check:
 - macOS sandboxed apps have the network client entitlement.
 - iOS ATS allows the URL if it is not HTTPS.
 - Required HTTP headers are passed through `httpHeaders`.
+- Linux has `libvlc-dev` and `vlc` installed.
 
 ### macOS `Library not loaded: VLCKit`
 

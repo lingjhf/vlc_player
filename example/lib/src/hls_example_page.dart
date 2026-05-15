@@ -4,9 +4,10 @@ import 'package:vlc_player/vlc_player.dart';
 import 'player_example_view.dart';
 
 class HlsExamplePage extends StatefulWidget {
-  const HlsExamplePage({super.key, this.showPlayer = true});
+  const HlsExamplePage({super.key, this.showPlayer = true, this.source});
 
   final bool showPlayer;
+  final Uri? source;
 
   @override
   State<HlsExamplePage> createState() => _HlsExamplePageState();
@@ -14,7 +15,9 @@ class HlsExamplePage extends StatefulWidget {
 
 class _HlsExamplePageState extends State<HlsExamplePage> {
   late final VlcPlayerController _controller = VlcPlayerController(
-    source: Uri.parse('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+    source:
+        widget.source ??
+        Uri.parse('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
   );
 
   @override

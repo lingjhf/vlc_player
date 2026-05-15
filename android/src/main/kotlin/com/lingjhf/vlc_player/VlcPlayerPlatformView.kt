@@ -13,6 +13,7 @@ import io.flutter.plugin.platform.PlatformView
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 
 internal class VlcPlayerPlatformView(
@@ -140,6 +141,100 @@ internal class VlcPlayerPlatformView(
         result.success(null)
     }
 
+    fun getAudioTracks(result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        result.success(trackDescriptions(mediaPlayer.audioTracks))
+    }
+
+    fun setAudioTrack(id: Int, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        if (!mediaPlayer.setAudioTrack(id)) {
+            result.error("track_not_found", "Audio track $id was not found.", null)
+            return
+        }
+        result.success(null)
+    }
+
+    fun getSubtitleTracks(result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        result.success(trackDescriptions(mediaPlayer.spuTracks))
+    }
+
+    fun setSubtitleTrack(id: Int, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        if (!mediaPlayer.setSpuTrack(id)) {
+            result.error("track_not_found", "Subtitle track $id was not found.", null)
+            return
+        }
+        result.success(null)
+    }
+
+    fun disableSubtitle(result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        mediaPlayer.setSpuTrack(-1)
+        result.success(null)
+    }
+
+    fun addSubtitle(uri: String, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        if (!mediaPlayer.addSlave(IMedia.Slave.Type.Subtitle, Uri.parse(uri), true)) {
+            result.error("add_subtitle_failed", "Failed to add subtitle: $uri", null)
+            return
+        }
+        result.success(null)
+    }
+
+    fun getMediaInfo(result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+
+        val media = mediaPlayer.media
+        if (media == null) {
+            result.success(emptyMediaInfo())
+            return
+        }
+
+        if (!media.isParsed) {
+            media.parse(IMedia.Parse.ParseLocal or IMedia.Parse.ParseNetwork)
+        }
+
+        val info = HashMap<String, Any?>()
+        info["title"] = media.getMeta(IMedia.Meta.Title)
+        info["artist"] = media.getMeta(IMedia.Meta.Artist)
+        info["album"] = media.getMeta(IMedia.Meta.Album)
+        info["duration"] = maxOf(media.duration, mediaPlayer.length, 0L)
+
+        val videoTracks = ArrayList<Map<String, Any?>>()
+        val audioTracks = ArrayList<Map<String, Any?>>()
+        val subtitleTracks = ArrayList<Map<String, Any?>>()
+        for (index in 0 until media.trackCount) {
+            val track = media.getTrack(index) ?: continue
+            val trackInfo = mediaTrackInfo(track)
+            when (track.type) {
+                IMedia.Track.Type.Video -> videoTracks.add(trackInfo)
+                IMedia.Track.Type.Audio -> audioTracks.add(trackInfo)
+                IMedia.Track.Type.Text -> subtitleTracks.add(trackInfo)
+            }
+        }
+        info["videoTracks"] = videoTracks
+        info["audioTracks"] = audioTracks
+        info["subtitleTracks"] = subtitleTracks
+        result.success(info)
+    }
+
     override fun onFlutterViewAttached(flutterView: View) {
         if (!disposed) {
             attachViewsIfNeeded()
@@ -220,6 +315,56 @@ internal class VlcPlayerPlatformView(
         }
         result.error("disposed", "The vlc_player has been disposed.", null)
         return false
+    }
+
+    private fun trackDescriptions(
+        tracks: Array<MediaPlayer.TrackDescription>?,
+    ): List<Map<String, Any?>> {
+        return tracks.orEmpty().map { track ->
+            mapOf(
+                "id" to track.id,
+                "name" to track.name,
+                "language" to null,
+            )
+        }
+    }
+
+    private fun emptyMediaInfo(): Map<String, Any?> {
+        return mapOf(
+            "title" to null,
+            "artist" to null,
+            "album" to null,
+            "duration" to 0L,
+            "videoTracks" to emptyList<Map<String, Any?>>(),
+            "audioTracks" to emptyList<Map<String, Any?>>(),
+            "subtitleTracks" to emptyList<Map<String, Any?>>(),
+        )
+    }
+
+    private fun mediaTrackInfo(track: IMedia.Track): Map<String, Any?> {
+        val info = HashMap<String, Any?>()
+        info["type"] = trackTypeName(track.type)
+        info["codec"] = track.codec
+        info["language"] = track.language
+        info["bitrate"] = track.bitrate.takeIf { it > 0 }
+        if (track is IMedia.VideoTrack) {
+            info["width"] = track.width.takeIf { it > 0 }
+            info["height"] = track.height.takeIf { it > 0 }
+        }
+        if (track is IMedia.AudioTrack) {
+            info["channels"] = track.channels.takeIf { it > 0 }
+            info["sampleRate"] = track.rate.takeIf { it > 0 }
+        }
+        return info
+    }
+
+    private fun trackTypeName(type: Int): String {
+        return when (type) {
+            IMedia.Track.Type.Audio -> "audio"
+            IMedia.Track.Type.Video -> "video"
+            IMedia.Track.Type.Text -> "subtitle"
+            else -> "unknown"
+        }
     }
 
     private fun sendSnapshot() {

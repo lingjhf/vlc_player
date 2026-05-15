@@ -89,6 +89,34 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                 player.setPlaybackSpeed(speed, result)
             }
+            "getAudioTracks" -> player.getAudioTracks(result)
+            "setAudioTrack" -> {
+                val id = call.argument<Number>("id")?.toInt()
+                if (id == null || id < 0) {
+                    result.error("invalid_args", "A non-negative audio track id is required.", null)
+                    return
+                }
+                player.setAudioTrack(id, result)
+            }
+            "getSubtitleTracks" -> player.getSubtitleTracks(result)
+            "setSubtitleTrack" -> {
+                val id = call.argument<Number>("id")?.toInt()
+                if (id == null || id < 0) {
+                    result.error("invalid_args", "A non-negative subtitle track id is required.", null)
+                    return
+                }
+                player.setSubtitleTrack(id, result)
+            }
+            "disableSubtitle" -> player.disableSubtitle(result)
+            "addSubtitle" -> {
+                val uri = call.argument<String>("uri")
+                if (uri.isNullOrEmpty()) {
+                    result.error("invalid_args", "A non-empty subtitle uri is required.", null)
+                    return
+                }
+                player.addSubtitle(uri, result)
+            }
+            "getMediaInfo" -> player.getMediaInfo(result)
             else -> result.notImplemented()
         }
     }

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'vlc_media_info.dart';
 import 'vlc_player_value.dart';
 
 class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
@@ -67,6 +68,11 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
   @internal
   Future<int> attachTextureForWindows() async {
+    return attachTexturePlayer();
+  }
+
+  @internal
+  Future<int> attachTexturePlayer() async {
     _ensureNotDisposed();
 
     final existingTextureId = _textureId;
@@ -88,7 +94,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     final viewId = (response?['viewId'] as num?)?.toInt();
     final textureId = (response?['textureId'] as num?)?.toInt();
     if (viewId == null || textureId == null) {
-      throw StateError('Windows vlc_player creation returned invalid data.');
+      throw StateError('vlc_player texture creation returned invalid data.');
     }
 
     _viewId = viewId;
@@ -172,6 +178,45 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     return _invoke('setPlaybackSpeed', <String, Object?>{'speed': speed});
   }
 
+  Future<List<VlcTrackDescription>> getAudioTracks() async {
+    final tracks = await _invokeFor<List<Object?>>('getAudioTracks');
+    return _trackDescriptionsFrom(tracks);
+  }
+
+  Future<void> setAudioTrack(int id) {
+    if (id < 0) {
+      throw ArgumentError.value(id, 'id', 'Must be non-negative.');
+    }
+    return _invoke('setAudioTrack', <String, Object?>{'id': id});
+  }
+
+  Future<List<VlcTrackDescription>> getSubtitleTracks() async {
+    final tracks = await _invokeFor<List<Object?>>('getSubtitleTracks');
+    return _trackDescriptionsFrom(tracks);
+  }
+
+  Future<void> setSubtitleTrack(int id) {
+    if (id < 0) {
+      throw ArgumentError.value(id, 'id', 'Must be non-negative.');
+    }
+    return _invoke('setSubtitleTrack', <String, Object?>{'id': id});
+  }
+
+  Future<void> disableSubtitle() => _invoke('disableSubtitle');
+
+  Future<void> addSubtitle(Uri uri) {
+    final value = uri.toString();
+    if (value.isEmpty) {
+      throw ArgumentError.value(uri, 'uri', 'Must be non-empty.');
+    }
+    return _invoke('addSubtitle', <String, Object?>{'uri': value});
+  }
+
+  Future<VlcMediaInfo> getMediaInfo() async {
+    final info = await _invokeFor<Map<Object?, Object?>>('getMediaInfo');
+    return VlcMediaInfo.fromMap(info ?? const <Object?, Object?>{});
+  }
+
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) {
     _ensureNotDisposed();
     final viewId = _viewId;
@@ -183,6 +228,29 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       'viewId': viewId,
       if (arguments != null) ...arguments,
     });
+  }
+
+  Future<T?> _invokeFor<T>(String method, [Map<String, Object?>? arguments]) {
+    _ensureNotDisposed();
+    final viewId = _viewId;
+    if (viewId == null) {
+      throw StateError('The controller is not attached to a VlcPlayer.');
+    }
+
+    return methodChannel.invokeMethod<T>(method, <String, Object?>{
+      'viewId': viewId,
+      if (arguments != null) ...arguments,
+    });
+  }
+
+  static List<VlcTrackDescription> _trackDescriptionsFrom(Object? value) {
+    if (value is! List<Object?>) {
+      return const <VlcTrackDescription>[];
+    }
+    return value
+        .whereType<Map<Object?, Object?>>()
+        .map(VlcTrackDescription.fromMap)
+        .toList(growable: false);
   }
 
   Future<void> _disposeNativeView(int viewId) {

@@ -18,6 +18,9 @@ set(PLUGIN_NAME "vlc_player_plugin")
 
 # Any new source files that you add to the plugin should be added here.
 list(APPEND PLUGIN_SOURCES
+  "../src/native/vlc_player_core.cc"
+  "../src/native/vlc_player_core.h"
+  "../src/native/vlc_player_types.h"
   "vlc_player_plugin.cpp"
   "vlc_player_plugin.h"
 )
@@ -53,11 +56,11 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
 endif()
 
 set(VLC_PLAYER_VLC_VERSION "3.0.21")
-set(VLC_PLAYER_VLC_ARCHIVE "vlc-${VLC_PLAYER_VLC_VERSION}-win64.zip")
+set(VLC_PLAYER_VLC_ARCHIVE "vlc-${VLC_PLAYER_VLC_VERSION}-win64.7z")
 set(VLC_PLAYER_VLC_URL
   "https://download.videolan.org/pub/videolan/vlc/${VLC_PLAYER_VLC_VERSION}/win64/${VLC_PLAYER_VLC_ARCHIVE}")
 set(VLC_PLAYER_VLC_SHA256
-  "a0b7ec02b50adf6417eed014fb8df50af39690505a4225b85b3dc2ed17d14843")
+  "9d2b24d6bc4196b3da8d181a3878678ba272e2a7690321f8826da76a69b2fb9c")
 set(VLC_PLAYER_VLC_DOWNLOAD_DIR "${CMAKE_CURRENT_BINARY_DIR}/vlc")
 set(VLC_PLAYER_VLC_ARCHIVE_PATH
   "${VLC_PLAYER_VLC_DOWNLOAD_DIR}/${VLC_PLAYER_VLC_ARCHIVE}")
@@ -95,6 +98,27 @@ if(NOT EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" OR
   endif()
 endif()
 
+set(VLC_PLAYER_LIBVLC_MEDIA_HEADER
+  "${VLC_PLAYER_RUNTIME_DIR}/sdk/include/vlc/libvlc_media.h")
+if(EXISTS "${VLC_PLAYER_LIBVLC_MEDIA_HEADER}")
+  file(READ "${VLC_PLAYER_LIBVLC_MEDIA_HEADER}" vlc_player_libvlc_media)
+  set(vlc_player_libvlc_media_patched "${vlc_player_libvlc_media}")
+  string(REPLACE
+    "typedef SSIZE_T ssize_t;"
+    "#if _MSC_VER < 1900\ntypedef SSIZE_T ssize_t;\n#endif"
+    vlc_player_libvlc_media_patched
+    "${vlc_player_libvlc_media_patched}")
+  string(REPLACE
+    "#ifndef _SSIZE_T_DEFINED\n#define _SSIZE_T_DEFINED\ntypedef SSIZE_T ssize_t;\n#endif"
+    "#if _MSC_VER < 1900\ntypedef SSIZE_T ssize_t;\n#endif"
+    vlc_player_libvlc_media_patched
+    "${vlc_player_libvlc_media_patched}")
+  if(NOT vlc_player_libvlc_media STREQUAL vlc_player_libvlc_media_patched)
+    file(WRITE "${VLC_PLAYER_LIBVLC_MEDIA_HEADER}"
+      "${vlc_player_libvlc_media_patched}")
+  endif()
+endif()
+
 # List of absolute paths to libraries that should be bundled with the plugin.
 # This list could contain prebuilt libraries, or libraries created by an
 # external build triggered from this build file.
@@ -104,7 +128,16 @@ set(vlc_player_bundled_libraries
 )
 if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" AND
    EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlccore.dll" AND
-   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/plugins")
+   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/plugins" AND
+   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/sdk/include/vlc/vlc.h" AND
+   EXISTS "${VLC_PLAYER_RUNTIME_DIR}/sdk/lib/libvlc.lib")
+  target_include_directories(${PLUGIN_NAME} PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../src/native"
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libvlcpp"
+    "${VLC_PLAYER_RUNTIME_DIR}/sdk/include")
+  target_link_libraries(${PLUGIN_NAME} PRIVATE
+    "${VLC_PLAYER_RUNTIME_DIR}/sdk/lib/libvlc.lib")
+
   file(GLOB VLC_PLAYER_RUNTIME_DLLS "${VLC_PLAYER_RUNTIME_DIR}/*.dll")
   set(vlc_player_bundled_libraries
     ${VLC_PLAYER_RUNTIME_DLLS}
@@ -125,7 +158,8 @@ if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" AND
 else()
   message(FATAL_ERROR
     "Incomplete downloaded VLC Windows runtime in ${VLC_PLAYER_RUNTIME_DIR}. "
-    "Expected libvlc.dll, libvlccore.dll, and plugins/.")
+    "Expected libvlc.dll, libvlccore.dll, plugins/, sdk/include, and "
+    "sdk/lib/libvlc.lib.")
 endif()
 
 # === Tests ===
@@ -143,6 +177,7 @@ include(FetchContent)
 FetchContent_Declare(
   googletest
   URL https://github.com/google/googletest/archive/refs/tags/v1.17.0.zip
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 # Prevent overriding the parent project's compiler/linker settings
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
@@ -158,13 +193,33 @@ add_executable(${TEST_RUNNER}
 )
 apply_standard_settings(${TEST_RUNNER})
 target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_include_directories(${TEST_RUNNER} PRIVATE
+  "${CMAKE_CURRENT_SOURCE_DIR}/../src/native"
+  "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libvlcpp"
+  "${VLC_PLAYER_RUNTIME_DIR}/sdk/include")
 target_link_libraries(${TEST_RUNNER} PRIVATE flutter_wrapper_plugin)
+target_link_libraries(${TEST_RUNNER} PRIVATE
+  "${VLC_PLAYER_RUNTIME_DIR}/sdk/lib/libvlc.lib")
 target_link_libraries(${TEST_RUNNER} PRIVATE gtest_main gmock)
 # flutter_wrapper_plugin has link dependencies on the Flutter DLL.
 add_custom_command(TARGET ${TEST_RUNNER} POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different
   "${FLUTTER_LIBRARY}" $<TARGET_FILE_DIR:${TEST_RUNNER}>
 )
+foreach(vlc_player_runtime_dll ${VLC_PLAYER_RUNTIME_DLLS})
+  add_custom_command(TARGET ${TEST_RUNNER} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${vlc_player_runtime_dll}" $<TARGET_FILE_DIR:${TEST_RUNNER}>
+  )
+endforeach()
+foreach(vlc_player_runtime_directory hrtfs locale lua plugins skins)
+  if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}")
+    add_custom_command(TARGET ${TEST_RUNNER} POST_BUILD
+      COMMAND "${CMAKE_COMMAND}" -E copy_directory
+      "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}"
+      "$<TARGET_FILE_DIR:${TEST_RUNNER}>/${vlc_player_runtime_directory}")
+  endif()
+endforeach()
 
 # Enable automatic test discovery.
 include(GoogleTest)

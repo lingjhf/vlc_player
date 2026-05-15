@@ -1,0 +1,48 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:integration_test/integration_test.dart';
+import 'package:vlc_player_example/main.dart';
+
+void main() {
+  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  testWidgets('example app navigates without a platform view', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(const MyApp(showPlayer: false));
+
+    expect(find.text('vlc_player example'), findsOneWidget);
+    expect(find.text('Video file'), findsOneWidget);
+    expect(find.text('HLS stream'), findsOneWidget);
+    expect(find.text('Full player'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('MP4 sample video'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey<String>('hls-example-tile')));
+    await tester.pumpAndSettle();
+    expect(find.text('M3U8 sample stream'), findsOneWidget);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-player-example-tile')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.byKey(const ValueKey<String>('full-player-play-pause-button')),
+      findsOneWidget,
+    );
+
+    await tester.tap(
+      find.byKey(const ValueKey<String>('full-player-orientation-button')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);
+  });
+}

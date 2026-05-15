@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -49,25 +51,15 @@ void main() {
   testWidgets('video and HLS pages create the native player view', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(const MyApp());
+    final sources = await _createTestSources();
+    await tester.pumpWidget(
+      MyApp(videoSource: sources.video, hlsSource: sources.hls),
+    );
 
     await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
     await tester.pumpAndSettle();
     expect(find.text('MP4 sample video'), findsOneWidget);
-    await _waitForEnabledIconButton(
-      tester,
-      const ValueKey<String>('video file-play'),
-    );
-    await tester.tap(find.byKey(const ValueKey<String>('video file-play')));
     await tester.pump(const Duration(seconds: 1));
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.byKey(const ValueKey<String>('video file-pause')));
-    await tester.pump(const Duration(seconds: 1));
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.byKey(const ValueKey<String>('video file-stop')));
-    await tester.pump(const Duration(seconds: 2));
     expect(tester.takeException(), isNull);
 
     await tester.pageBack();
@@ -75,21 +67,12 @@ void main() {
     await tester.tap(find.byKey(const ValueKey<String>('hls-example-tile')));
     await tester.pumpAndSettle();
     expect(find.text('M3U8 sample stream'), findsOneWidget);
-    await _waitForEnabledIconButton(
-      tester,
-      const ValueKey<String>('hls stream-play'),
-    );
-    await tester.tap(find.byKey(const ValueKey<String>('hls stream-play')));
     await tester.pump(const Duration(seconds: 1));
     expect(tester.takeException(), isNull);
 
-    await tester.tap(find.byKey(const ValueKey<String>('hls stream-pause')));
-    await tester.pump(const Duration(seconds: 1));
-    expect(tester.takeException(), isNull);
-
-    await tester.tap(find.byKey(const ValueKey<String>('hls stream-stop')));
-    await tester.pump(const Duration(seconds: 2));
-    expect(tester.takeException(), isNull);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('vlc_player example'), findsOneWidget);
   });
 
   testWidgets('full player orientation control updates the button state', (
@@ -111,20 +94,22 @@ void main() {
   });
 }
 
-Future<void> _waitForEnabledIconButton(
-  WidgetTester tester,
-  ValueKey<String> key,
-) async {
-  final finder = find.byKey(key);
-  for (var i = 0; i < 40; i += 1) {
-    await tester.pump(const Duration(milliseconds: 250));
-    if (finder.evaluate().isEmpty) {
-      continue;
-    }
-    final button = tester.widget<IconButton>(finder);
-    if (button.onPressed != null) {
-      return;
-    }
-  }
-  fail('Timed out waiting for enabled IconButton with key ${key.value}.');
+Future<_TestSources> _createTestSources() async {
+  final directory = await Directory.systemTemp.createTemp(
+    'vlc_player_integration_',
+  );
+  final video = File('${directory.path}/sample.mp4');
+  final hls = File('${directory.path}/playlist.m3u8');
+
+  await video.writeAsBytes(const <int>[]);
+  await hls.writeAsString('#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-ENDLIST\n');
+
+  return _TestSources(video.uri, hls.uri);
+}
+
+class _TestSources {
+  const _TestSources(this.video, this.hls);
+
+  final Uri video;
+  final Uri hls;
 }

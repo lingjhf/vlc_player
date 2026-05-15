@@ -4,9 +4,10 @@ import 'package:vlc_player/vlc_player.dart';
 import 'player_example_view.dart';
 
 class VideoExamplePage extends StatefulWidget {
-  const VideoExamplePage({super.key, this.showPlayer = true});
+  const VideoExamplePage({super.key, this.showPlayer = true, this.source});
 
   final bool showPlayer;
+  final Uri? source;
 
   @override
   State<VideoExamplePage> createState() => _VideoExamplePageState();
@@ -14,7 +15,9 @@ class VideoExamplePage extends StatefulWidget {
 
 class _VideoExamplePageState extends State<VideoExamplePage> {
   late final VlcPlayerController _controller = VlcPlayerController(
-    source: Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
+    source:
+        widget.source ??
+        Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
   );
 
   @override

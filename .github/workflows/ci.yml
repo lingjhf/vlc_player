@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - master
+      - linux/**
+      - windows/**
 
 permissions:
   contents: read
@@ -17,8 +19,12 @@ concurrency:
 jobs:
   dart-and-android:
     name: Dart and Android
+    if: >
+      github.event_name != 'push' ||
+      (!startsWith(github.ref, 'refs/heads/linux/') &&
+       !startsWith(github.ref, 'refs/heads/windows/'))
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -47,7 +53,7 @@ jobs:
         run: flutter pub get
 
       - name: Analyze
-        run: dart analyze lib test example/lib example/test example/integration_test
+        run: dart analyze lib test example/lib example/test example/integration_test example/test_driver
 
       - name: Run package tests
         run: flutter test
@@ -60,8 +66,27 @@ jobs:
         working-directory: example
         run: flutter build apk --debug
 
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run Android integration tests
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_6
+          working-directory: example
+          script: flutter drive --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
   apple:
     name: iOS and macOS
+    if: >
+      github.event_name != 'push' ||
+      (!startsWith(github.ref, 'refs/heads/linux/') &&
+       !startsWith(github.ref, 'refs/heads/windows/'))
     runs-on: macos-latest
     timeout-minutes: 90
 
@@ -89,18 +114,28 @@ jobs:
         working-directory: example
         run: flutter build ios --no-codesign
 
+      - name: Run iOS integration tests
+        working-directory: example
+        run: |
+          set -eo pipefail
+          DEVICE_ID=$(xcrun simctl list devices available -j | ruby -rjson -e 'devices = JSON.parse(STDIN.read).fetch("devices").values.flatten; device = devices.find { |item| item["name"].include?("iPhone") && item["isAvailable"] }; abort("No available iPhone simulator") unless device; puts device["udid"]')
+          xcrun simctl boot "$DEVICE_ID" || true
+          xcrun simctl bootstatus "$DEVICE_ID" -b
+          flutter drive --timeout=1200 -d "$DEVICE_ID" --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
       - name: Build macOS example
         working-directory: example
         run: flutter build macos
 
       - name: Run macOS integration tests
         working-directory: example
-        run: flutter test --timeout=20m integration_test/plugin_integration_test.dart
+        run: flutter drive --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
   windows:
     name: Windows
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/linux/')
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -129,3 +164,53 @@ jobs:
       - name: Run Windows native tests
         working-directory: example/build/windows/x64/plugins/vlc_player
         run: ctest -C Release --output-on-failure --no-tests=error
+
+      - name: Run Windows integration tests
+        working-directory: example
+        run: flutter drive --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
+  linux:
+    name: Linux
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/heads/windows/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libvlc-dev vlc xvfb
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Enable Linux desktop
+        run: flutter config --enable-linux-desktop
+
+      - name: Show Flutter version
+        run: flutter --version
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build Linux example
+        working-directory: example
+        run: flutter build linux
+
+      - name: Run Linux native tests
+        working-directory: example/build/linux/x64/release/plugins/vlc_player
+        run: ctest --output-on-failure --no-tests=error
+
+      - name: Run Linux integration tests
+        working-directory: example
+        run: xvfb-run -a flutter drive --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/linux_smoke_test.dart

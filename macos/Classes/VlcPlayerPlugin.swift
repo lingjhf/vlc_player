@@ -96,6 +96,35 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       }
       player.setPlaybackSpeed(speed)
       result(nil)
+    case "getAudioTracks":
+      result(player.getAudioTracks())
+    case "setAudioTrack":
+      guard let id = Self.intValue(arguments["id"]), id >= 0 else {
+        result(FlutterError(code: "invalid_args", message: "A non-negative audio track id is required.", details: nil))
+        return
+      }
+      player.setAudioTrack(id)
+      result(nil)
+    case "getSubtitleTracks":
+      result(player.getSubtitleTracks())
+    case "setSubtitleTrack":
+      guard let id = Self.intValue(arguments["id"]), id >= 0 else {
+        result(FlutterError(code: "invalid_args", message: "A non-negative subtitle track id is required.", details: nil))
+        return
+      }
+      player.setSubtitleTrack(id)
+      result(nil)
+    case "disableSubtitle":
+      player.disableSubtitle()
+      result(nil)
+    case "addSubtitle":
+      guard let uri = arguments["uri"] as? String, !uri.isEmpty else {
+        result(FlutterError(code: "invalid_args", message: "A non-empty subtitle uri is required.", details: nil))
+        return
+      }
+      player.addSubtitle(uri, result: result)
+    case "getMediaInfo":
+      result(player.getMediaInfo())
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -241,6 +270,52 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     sendSnapshot()
   }
 
+  func getAudioTracks() -> [[String: Any?]] {
+    return trackDescriptions(indexes: mediaPlayer.audioTrackIndexes, names: mediaPlayer.audioTrackNames)
+  }
+
+  func setAudioTrack(_ id: Int) {
+    mediaPlayer.currentAudioTrackIndex = Int32(id)
+  }
+
+  func getSubtitleTracks() -> [[String: Any?]] {
+    return trackDescriptions(indexes: mediaPlayer.videoSubTitlesIndexes, names: mediaPlayer.videoSubTitlesNames)
+  }
+
+  func setSubtitleTrack(_ id: Int) {
+    mediaPlayer.currentVideoSubTitleIndex = Int32(id)
+  }
+
+  func disableSubtitle() {
+    mediaPlayer.currentVideoSubTitleIndex = -1
+  }
+
+  func addSubtitle(_ uri: String, result: @escaping FlutterResult) {
+    guard let url = URL(string: uri) else {
+      result(FlutterError(code: "invalid_uri", message: "The provided subtitle uri is invalid.", details: uri))
+      return
+    }
+    let status = mediaPlayer.addPlaybackSlave(url, type: .subtitle, enforce: true)
+    if status != 0 {
+      result(FlutterError(code: "add_subtitle_failed", message: "Failed to add subtitle: \(uri)", details: status))
+      return
+    }
+    result(nil)
+  }
+
+  func getMediaInfo() -> [String: Any?] {
+    let media = mediaPlayer.media
+    return [
+      "title": media?.metaData.title,
+      "artist": media?.metaData.artist,
+      "album": media?.metaData.album,
+      "duration": Self.milliseconds(from: media?.length),
+      "videoTracks": mediaTracks(media, matching: "video"),
+      "audioTracks": mediaTracks(media, matching: "audio"),
+      "subtitleTracks": mediaTracks(media, matching: "subtitle"),
+    ]
+  }
+
   func dispose() {
     guard !isDisposed else {
       return
@@ -287,6 +362,59 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       return 0
     }
     return max(0, Int(time.intValue))
+  }
+
+  private func trackDescriptions(indexes: [Any]?, names: [Any]?) -> [[String: Any?]] {
+    let trackIndexes = indexes as? [NSNumber] ?? []
+    let trackNames = names as? [String] ?? []
+    return trackIndexes.enumerated().map { offset, index in
+      [
+        "id": index.intValue,
+        "name": offset < trackNames.count ? trackNames[offset] : "",
+        "language": nil,
+      ]
+    }
+  }
+
+  private func mediaTracks(_ media: VLCMedia?, matching type: String) -> [[String: Any?]] {
+    guard let tracks = media?.tracksInformation as? [[String: Any]] else {
+      return []
+    }
+
+    return tracks.compactMap { track in
+      guard Self.trackType(track[VLCMediaTracksInformationType]) == type else {
+        return nil
+      }
+      var info: [String: Any?] = [
+        "type": type,
+        "codec": track[VLCMediaTracksInformationCodec],
+        "language": track[VLCMediaTracksInformationLanguage],
+        "bitrate": track[VLCMediaTracksInformationBitrate],
+      ]
+      if type == "video" {
+        info["width"] = track[VLCMediaTracksInformationVideoWidth]
+        info["height"] = track[VLCMediaTracksInformationVideoHeight]
+      }
+      if type == "audio" {
+        info["channels"] = track[VLCMediaTracksInformationAudioChannelsNumber]
+        info["sampleRate"] = track[VLCMediaTracksInformationAudioRate]
+      }
+      return info
+    }
+  }
+
+  private static func trackType(_ value: Any?) -> String {
+    let raw = String(describing: value ?? "").lowercased()
+    if raw.contains("video") {
+      return "video"
+    }
+    if raw.contains("audio") {
+      return "audio"
+    }
+    if raw.contains("text") || raw.contains("subtitle") {
+      return "subtitle"
+    }
+    return "unknown"
   }
 
   private static func stateName(_ state: VLCMediaPlayerState) -> String {

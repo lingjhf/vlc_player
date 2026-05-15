@@ -21,33 +21,37 @@ class VlcPlayer extends StatefulWidget {
 }
 
 class _VlcPlayerState extends State<VlcPlayer> {
-  Future<int>? _windowsTextureId;
+  Future<int>? _textureId;
 
   @override
   void initState() {
     super.initState();
-    if (defaultTargetPlatform == TargetPlatform.windows) {
-      _windowsTextureId = widget.controller.attachTextureForWindows();
+    if (_usesTexturePlayer) {
+      _textureId = widget.controller.attachTexturePlayer();
     }
   }
 
   @override
   void didUpdateWidget(VlcPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (defaultTargetPlatform != TargetPlatform.windows ||
-        oldWidget.controller == widget.controller) {
+    if (!_usesTexturePlayer || oldWidget.controller == widget.controller) {
       return;
     }
     unawaited(oldWidget.controller.detach());
-    _windowsTextureId = widget.controller.attachTextureForWindows();
+    _textureId = widget.controller.attachTexturePlayer();
   }
 
   @override
   void dispose() {
-    if (defaultTargetPlatform == TargetPlatform.windows) {
+    if (_usesTexturePlayer) {
       unawaited(widget.controller.detach());
     }
     super.dispose();
+  }
+
+  bool get _usesTexturePlayer {
+    return defaultTargetPlatform == TargetPlatform.windows ||
+        defaultTargetPlatform == TargetPlatform.linux;
   }
 
   @override
@@ -80,11 +84,11 @@ class _VlcPlayerState extends State<VlcPlayer> {
       );
     }
 
-    if (defaultTargetPlatform == TargetPlatform.windows) {
+    if (_usesTexturePlayer) {
       return ColoredBox(
         color: widget.backgroundColor,
         child: FutureBuilder<int>(
-          future: _windowsTextureId,
+          future: _textureId,
           builder: (context, snapshot) {
             final textureId = snapshot.data;
             if (textureId != null) {
@@ -109,7 +113,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
         color: widget.backgroundColor,
         child: const Center(
           child: Text(
-            'vlc_player currently supports Android, iOS, macOS and Windows only.',
+            'vlc_player currently supports Android, iOS, macOS, Windows and Linux only.',
           ),
         ),
       );

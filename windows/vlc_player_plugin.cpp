@@ -15,17 +15,17 @@
 #include <flutter_messenger.h>
 #include <flutter_plugin_registrar.h>
 
-#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstring>
 #include <memory>
 #include <mutex>
 #include <string>
 #include <thread>
 #include <utility>
 #include <vector>
+
+#include "vlc_player_core.h"
 
 namespace vlc_player {
 namespace {
@@ -65,11 +65,11 @@ bool DirectoryExists(const std::wstring &path) {
          (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 }
 
-HMODULE LoadVlcRuntime(std::string *error) {
+bool ConfigureVlcRuntime(std::string *error) {
   const std::wstring app_directory = ExecutableDirectory();
   if (app_directory.empty()) {
     *error = "Unable to locate the Windows app directory.";
-    return nullptr;
+    return false;
   }
 
   const std::wstring bundled_libvlc = app_directory + L"\\libvlc.dll";
@@ -80,124 +80,12 @@ HMODULE LoadVlcRuntime(std::string *error) {
     *error =
         "The VLC Windows runtime is missing from the app bundle. Rebuild the "
         "Windows app so the plugin can download and bundle VLC.";
-    return nullptr;
+    return false;
   }
 
   SetEnvironmentVariableW(L"VLC_PLUGIN_PATH", plugins_directory.c_str());
-  HMODULE module = LoadLibraryW(bundled_libvlc.c_str());
-  if (module != nullptr) {
-    return module;
-  }
-
-  *error =
-      "Unable to load bundled libvlc.dll from the Windows app directory. "
-      "Rebuild the Windows app so the plugin can download and bundle a "
-      "matching VLC runtime.";
-  return nullptr;
+  return true;
 }
-
-struct libvlc_instance_t;
-struct libvlc_media_t;
-struct libvlc_media_player_t;
-
-using libvlc_video_lock_cb = void *(*)(void *opaque, void **planes);
-using libvlc_video_unlock_cb = void (*)(void *opaque, void *picture,
-                                        void *const *planes);
-using libvlc_video_display_cb = void (*)(void *opaque, void *picture);
-using libvlc_video_format_cb = unsigned (*)(void **opaque, char *chroma,
-                                            unsigned *width, unsigned *height,
-                                            unsigned *pitches,
-                                            unsigned *lines);
-using libvlc_video_cleanup_cb = void (*)(void *opaque);
-
-class LibVlcApi {
- public:
-  static LibVlcApi &Instance() {
-    static LibVlcApi api;
-    return api;
-  }
-
-  bool available() const { return available_; }
-  const std::string &error() const { return error_; }
-
-  libvlc_instance_t *(*new_instance)(int argc, const char *const *argv) =
-      nullptr;
-  void (*release_instance)(libvlc_instance_t *instance) = nullptr;
-  libvlc_media_player_t *(*media_player_new)(libvlc_instance_t *instance) =
-      nullptr;
-  void (*media_player_release)(libvlc_media_player_t *player) = nullptr;
-  libvlc_media_t *(*media_new_location)(libvlc_instance_t *instance,
-                                        const char *uri) = nullptr;
-  void (*media_release)(libvlc_media_t *media) = nullptr;
-  void (*media_add_option)(libvlc_media_t *media, const char *option) =
-      nullptr;
-  void (*media_player_set_media)(libvlc_media_player_t *player,
-                                 libvlc_media_t *media) = nullptr;
-  int (*media_player_play)(libvlc_media_player_t *player) = nullptr;
-  void (*media_player_pause)(libvlc_media_player_t *player) = nullptr;
-  void (*media_player_stop)(libvlc_media_player_t *player) = nullptr;
-  void (*media_player_set_time)(libvlc_media_player_t *player,
-                                int64_t time) = nullptr;
-  int64_t (*media_player_get_time)(libvlc_media_player_t *player) = nullptr;
-  int64_t (*media_player_get_length)(libvlc_media_player_t *player) = nullptr;
-  int (*audio_set_volume)(libvlc_media_player_t *player, int volume) = nullptr;
-  int (*media_player_set_rate)(libvlc_media_player_t *player,
-                               float rate) = nullptr;
-  float (*media_player_get_rate)(libvlc_media_player_t *player) = nullptr;
-  int (*media_player_get_state)(libvlc_media_player_t *player) = nullptr;
-  void (*video_set_callbacks)(libvlc_media_player_t *player,
-                              libvlc_video_lock_cb lock,
-                              libvlc_video_unlock_cb unlock,
-                              libvlc_video_display_cb display,
-                              void *opaque) = nullptr;
-  void (*video_set_format_callbacks)(libvlc_media_player_t *player,
-                                     libvlc_video_format_cb setup,
-                                     libvlc_video_cleanup_cb cleanup) =
-      nullptr;
-
- private:
-  LibVlcApi() {
-    module_ = LoadVlcRuntime(&error_);
-    if (module_ == nullptr) {
-      return;
-    }
-
-    available_ =
-        Load("libvlc_new", new_instance) &&
-        Load("libvlc_release", release_instance) &&
-        Load("libvlc_media_player_new", media_player_new) &&
-        Load("libvlc_media_player_release", media_player_release) &&
-        Load("libvlc_media_new_location", media_new_location) &&
-        Load("libvlc_media_release", media_release) &&
-        Load("libvlc_media_add_option", media_add_option) &&
-        Load("libvlc_media_player_set_media", media_player_set_media) &&
-        Load("libvlc_media_player_play", media_player_play) &&
-        Load("libvlc_media_player_pause", media_player_pause) &&
-        Load("libvlc_media_player_stop", media_player_stop) &&
-        Load("libvlc_media_player_set_time", media_player_set_time) &&
-        Load("libvlc_media_player_get_time", media_player_get_time) &&
-        Load("libvlc_media_player_get_length", media_player_get_length) &&
-        Load("libvlc_audio_set_volume", audio_set_volume) &&
-        Load("libvlc_media_player_set_rate", media_player_set_rate) &&
-        Load("libvlc_media_player_get_rate", media_player_get_rate) &&
-        Load("libvlc_media_player_get_state", media_player_get_state) &&
-        Load("libvlc_video_set_callbacks", video_set_callbacks) &&
-        Load("libvlc_video_set_format_callbacks", video_set_format_callbacks);
-  }
-
-  template <typename T>
-  bool Load(const char *name, T &target) {
-    target = reinterpret_cast<T>(GetProcAddress(module_, name));
-    if (target == nullptr && error_.empty()) {
-      error_ = std::string("Missing VLC runtime symbol: ") + name;
-    }
-    return target != nullptr;
-  }
-
-  HMODULE module_ = nullptr;
-  bool available_ = false;
-  std::string error_;
-};
 
 const EncodableValue *FindValue(const EncodableMap &map, const char *key) {
   auto it = map.find(EncodableValue(key));
@@ -302,25 +190,65 @@ std::vector<std::string> ReadHeaders(const EncodableMap &map) {
   return headers;
 }
 
-std::string StateName(int state) {
-  switch (state) {
-    case 1:
-      return "opening";
-    case 2:
-      return "buffering";
-    case 3:
-      return "playing";
-    case 4:
-      return "paused";
-    case 5:
-      return "stopped";
-    case 6:
-      return "ended";
-    case 7:
-      return "error";
-    default:
-      return "idle";
+EncodableValue NullableString(const std::string &value) {
+  return value.empty() ? EncodableValue() : EncodableValue(value);
+}
+
+EncodableList TrackDescriptions(
+    const std::vector<VlcTrackDescription> &tracks) {
+  EncodableList result;
+  for (const auto &track : tracks) {
+    EncodableMap item;
+    item[EncodableValue("id")] = EncodableValue(track.id);
+    item[EncodableValue("name")] = EncodableValue(track.name);
+    item[EncodableValue("language")] = NullableString(track.language);
+    result.push_back(EncodableValue(item));
   }
+  return result;
+}
+
+EncodableValue MediaTrackInfo(const VlcMediaTrackInfo &track) {
+  EncodableMap info;
+  info[EncodableValue("type")] = EncodableValue(track.type);
+  info[EncodableValue("codec")] = NullableString(track.codec);
+  info[EncodableValue("language")] = NullableString(track.language);
+  info[EncodableValue("bitrate")] = EncodableValue(track.bitrate);
+  if (track.width > 0) {
+    info[EncodableValue("width")] = EncodableValue(track.width);
+  }
+  if (track.height > 0) {
+    info[EncodableValue("height")] = EncodableValue(track.height);
+  }
+  if (track.channels > 0) {
+    info[EncodableValue("channels")] = EncodableValue(track.channels);
+  }
+  if (track.sample_rate > 0) {
+    info[EncodableValue("sampleRate")] = EncodableValue(track.sample_rate);
+  }
+  return EncodableValue(info);
+}
+
+EncodableList MediaTracks(const std::vector<VlcMediaTrackInfo> &tracks) {
+  EncodableList result;
+  for (const auto &track : tracks) {
+    result.push_back(MediaTrackInfo(track));
+  }
+  return result;
+}
+
+EncodableMap MediaInfo(const VlcMediaInfo &info) {
+  EncodableMap result;
+  result[EncodableValue("title")] = NullableString(info.title);
+  result[EncodableValue("artist")] = NullableString(info.artist);
+  result[EncodableValue("album")] = NullableString(info.album);
+  result[EncodableValue("duration")] = EncodableValue(info.duration);
+  result[EncodableValue("videoTracks")] =
+      EncodableValue(MediaTracks(info.video_tracks));
+  result[EncodableValue("audioTracks")] =
+      EncodableValue(MediaTracks(info.audio_tracks));
+  result[EncodableValue("subtitleTracks")] =
+      EncodableValue(MediaTracks(info.subtitle_tracks));
+  return result;
 }
 
 }  // namespace
@@ -357,30 +285,15 @@ class WindowsVlcPlayer {
             });
     event_channel_.SetStreamHandler(std::move(stream_handler));
 
-    auto &api = LibVlcApi::Instance();
-    std::vector<const char *> argv;
-    argv.reserve(options.size());
-    for (const auto &option : options) {
-      argv.push_back(option.c_str());
-    }
-
-    instance_ = api.new_instance(static_cast<int>(argv.size()), argv.data());
-    if (instance_ == nullptr) {
-      init_error_ = "Unable to create VLC instance.";
+    core_ = std::make_unique<VlcPlayerCore>(options, [this] {
+      if (!disposed_.load() && texture_id_ != -1) {
+        texture_registrar_->MarkTextureFrameAvailable(texture_id_);
+      }
+    });
+    if (!core_->is_valid()) {
+      init_error_ = core_->error();
       return;
     }
-
-    player_ = api.media_player_new(instance_);
-    if (player_ == nullptr) {
-      init_error_ = "Unable to create VLC media player.";
-      return;
-    }
-
-    api.video_set_callbacks(player_, &WindowsVlcPlayer::Lock,
-                            &WindowsVlcPlayer::Unlock,
-                            &WindowsVlcPlayer::Display, this);
-    api.video_set_format_callbacks(player_, &WindowsVlcPlayer::SetupFormat,
-                                   &WindowsVlcPlayer::CleanupFormat);
 
     texture_ = std::make_unique<flutter::TextureVariant>(
         flutter::PixelBufferTexture([this](size_t width, size_t height) {
@@ -405,113 +318,60 @@ class WindowsVlcPlayer {
   std::string SetSource(const std::string &uri,
                         const std::vector<std::string> &headers,
                         bool auto_play) {
-    if (const auto error = ActiveError(); !error.empty()) {
+    const std::string error = core_->SetSource(uri, headers, false);
+    SendSnapshot();
+    if (!error.empty() || !auto_play) {
       return error;
     }
-    if (uri.empty()) {
-      return "A non-empty uri is required.";
-    }
-
-    auto &api = LibVlcApi::Instance();
-    libvlc_media_t *media = api.media_new_location(instance_, uri.c_str());
-    if (media == nullptr) {
-      return "Unable to create VLC media.";
-    }
-
-    for (const auto &header : headers) {
-      api.media_add_option(media, header.c_str());
-    }
-
-    api.media_player_set_media(player_, media);
-    api.media_release(media);
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      state_override_ = "opening";
-      error_description_.clear();
-    }
-    SendSnapshot();
-
-    if (auto_play) {
-      return Play();
-    }
-    return "";
+    return Play();
   }
 
   std::string Play() {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    if (LibVlcApi::Instance().media_player_play(player_) != 0) {
-      return "VLC failed to start playback.";
-    }
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      state_override_.clear();
-    }
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this] { return core_->Play(); });
   }
 
   std::string Pause() {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    LibVlcApi::Instance().media_player_pause(player_);
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      state_override_.clear();
-    }
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this] { return core_->Pause(); });
   }
 
   std::string Stop() {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    LibVlcApi::Instance().media_player_stop(player_);
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      state_override_ = "stopped";
-    }
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this] { return core_->Stop(); });
   }
 
   std::string SeekTo(int64_t milliseconds) {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    LibVlcApi::Instance().media_player_set_time(
-        player_, std::max<int64_t>(0, milliseconds));
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this, milliseconds] {
+      return core_->SeekTo(milliseconds);
+    });
   }
 
   std::string SetVolume(int volume) {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    const int normalized_volume = std::clamp(volume, 0, 200);
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      volume_ = normalized_volume;
-    }
-    LibVlcApi::Instance().audio_set_volume(player_, normalized_volume);
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this, volume] {
+      return core_->SetVolume(volume);
+    });
   }
 
   std::string SetPlaybackSpeed(double speed) {
-    if (const auto error = ActiveError(); !error.empty()) {
-      return error;
-    }
-    const double normalized_speed = (std::max)(0.01, speed);
-    LibVlcApi::Instance().media_player_set_rate(
-        player_, static_cast<float>(normalized_speed));
-    SendSnapshot();
-    return "";
+    return RunAndSendSnapshot([this, speed] {
+      return core_->SetPlaybackSpeed(speed);
+    });
   }
+
+  EncodableList GetAudioTracks() {
+    return TrackDescriptions(core_->GetAudioTracks());
+  }
+
+  std::string SetAudioTrack(int id) { return core_->SetAudioTrack(id); }
+
+  EncodableList GetSubtitleTracks() {
+    return TrackDescriptions(core_->GetSubtitleTracks());
+  }
+
+  std::string SetSubtitleTrack(int id) { return core_->SetSubtitleTrack(id); }
+  std::string DisableSubtitle() { return core_->DisableSubtitle(); }
+  std::string AddSubtitle(const std::string &uri) {
+    return core_->AddSubtitle(uri);
+  }
+  EncodableMap GetMediaInfo() { return MediaInfo(core_->GetMediaInfo()); }
 
   void Dispose() {
     if (disposed_.exchange(true)) {
@@ -528,15 +388,9 @@ class WindowsVlcPlayer {
     }
     event_channel_.SetStreamHandler(nullptr);
 
-    auto &api = LibVlcApi::Instance();
-    if (player_ != nullptr) {
-      api.media_player_stop(player_);
-      api.media_player_release(player_);
-      player_ = nullptr;
-    }
-    if (instance_ != nullptr) {
-      api.release_instance(instance_);
-      instance_ = nullptr;
+    if (core_ != nullptr) {
+      core_->Dispose();
+      core_.reset();
     }
     if (texture_id_ != -1) {
       texture_registrar_->UnregisterTexture(texture_id_);
@@ -546,113 +400,48 @@ class WindowsVlcPlayer {
   }
 
  private:
-  static unsigned SetupFormat(void **opaque, char *chroma, unsigned *width,
-                              unsigned *height, unsigned *pitches,
-                              unsigned *lines) {
-    auto *player = static_cast<WindowsVlcPlayer *>(*opaque);
-    std::memcpy(chroma, "RGBA", 4);
-    pitches[0] = *width * 4;
-    lines[0] = *height;
-    player->ResizeVideoBuffer(*width, *height, pitches[0]);
-    return 1;
-  }
-
-  static void CleanupFormat(void *opaque) {}
-
-  static void *Lock(void *opaque, void **planes) {
-    auto *player = static_cast<WindowsVlcPlayer *>(opaque);
-    player->video_mutex_.lock();
-    if (player->frame_buffer_.empty()) {
-      player->video_mutex_.unlock();
-      planes[0] = nullptr;
-      return nullptr;
-    }
-    planes[0] = player->frame_buffer_.data();
-    return player;
-  }
-
-  static void Unlock(void *opaque, void *picture, void *const *planes) {
-    if (picture == nullptr) {
-      return;
-    }
-    auto *player = static_cast<WindowsVlcPlayer *>(opaque);
-    player->render_buffer_ = player->frame_buffer_;
-    player->pixel_buffer_.buffer = player->render_buffer_.data();
-    player->video_mutex_.unlock();
-  }
-
-  static void Display(void *opaque, void *picture) {
-    auto *player = static_cast<WindowsVlcPlayer *>(opaque);
-    if (!player->disposed_.load() && player->texture_id_ != -1) {
-      player->texture_registrar_->MarkTextureFrameAvailable(player->texture_id_);
-    }
+  template <typename Operation>
+  std::string RunAndSendSnapshot(Operation operation) {
+    const std::string error = operation();
+    SendSnapshot();
+    return error;
   }
 
   const FlutterDesktopPixelBuffer *CopyPixelBuffer(size_t width,
                                                    size_t height) {
-    std::lock_guard<std::mutex> lock(video_mutex_);
-    if (render_buffer_.empty()) {
+    if (core_ == nullptr) {
       return nullptr;
     }
+    const uint8_t *buffer = nullptr;
+    uint32_t pixel_width = 0;
+    uint32_t pixel_height = 0;
+    if (!core_->CopyPixels(&buffer, &pixel_width, &pixel_height)) {
+      return nullptr;
+    }
+    pixel_buffer_.buffer = buffer;
+    pixel_buffer_.width = pixel_width;
+    pixel_buffer_.height = pixel_height;
+    pixel_buffer_.release_callback = nullptr;
+    pixel_buffer_.release_context = nullptr;
     return &pixel_buffer_;
   }
 
-  void ResizeVideoBuffer(unsigned width, unsigned height, unsigned pitch) {
-    std::lock_guard<std::mutex> lock(video_mutex_);
-    frame_buffer_.assign(static_cast<size_t>(pitch) * height, 0);
-    render_buffer_ = frame_buffer_;
-    pixel_buffer_.buffer = render_buffer_.data();
-    pixel_buffer_.width = width;
-    pixel_buffer_.height = height;
-    pixel_buffer_.release_callback = nullptr;
-    pixel_buffer_.release_context = nullptr;
-  }
-
-  std::string ActiveError() const {
-    if (disposed_.load()) {
-      return "The vlc_player has been disposed.";
-    }
-    if (!init_error_.empty()) {
-      return init_error_;
-    }
-    if (player_ == nullptr) {
-      return "The VLC media player is not available.";
-    }
-    return "";
-  }
-
   void SendSnapshot(bool lock_messenger = false) {
-    if (disposed_.load() || player_ == nullptr) {
+    if (disposed_.load() || core_ == nullptr) {
       return;
     }
 
-    auto &api = LibVlcApi::Instance();
-    const int state = api.media_player_get_state(player_);
-    std::string state_name;
-    int volume = 100;
-    std::string error_description;
-    {
-      std::lock_guard<std::mutex> lock(state_mutex_);
-      if (state == 7) {
-        error_description_ = "VLC encountered an error while playing the media.";
-      }
-      state_name = state_override_.empty() ? StateName(state) : state_override_;
-      volume = volume_;
-      error_description = error_description_;
-    }
-
+    const VlcSnapshot snapshot = core_->Snapshot();
     EncodableMap event;
-    event[EncodableValue("state")] = EncodableValue(state_name);
-    event[EncodableValue("position")] = EncodableValue(
-        std::max<int64_t>(0, api.media_player_get_time(player_)));
-    event[EncodableValue("duration")] = EncodableValue(
-        std::max<int64_t>(0, api.media_player_get_length(player_)));
-    event[EncodableValue("volume")] = EncodableValue(volume);
+    event[EncodableValue("state")] = EncodableValue(snapshot.state);
+    event[EncodableValue("position")] = EncodableValue(snapshot.position);
+    event[EncodableValue("duration")] = EncodableValue(snapshot.duration);
+    event[EncodableValue("volume")] = EncodableValue(snapshot.volume);
     event[EncodableValue("playbackSpeed")] =
-        EncodableValue(static_cast<double>(api.media_player_get_rate(player_)));
-    if (!error_description.empty()) {
+        EncodableValue(snapshot.playback_speed);
+    if (!snapshot.error_description.empty()) {
       event[EncodableValue("errorDescription")] =
-          EncodableValue(error_description);
+          EncodableValue(snapshot.error_description);
     }
 
     std::lock_guard<std::mutex> lock(event_mutex_);
@@ -675,8 +464,7 @@ class WindowsVlcPlayer {
   std::unique_ptr<flutter::EventSink<EncodableValue>> event_sink_;
   std::mutex event_mutex_;
 
-  libvlc_instance_t *instance_ = nullptr;
-  libvlc_media_player_t *player_ = nullptr;
+  std::unique_ptr<VlcPlayerCore> core_;
   std::string init_error_;
   std::atomic<bool> disposed_ = false;
   std::atomic<bool> polling_ = false;
@@ -685,14 +473,6 @@ class WindowsVlcPlayer {
   std::unique_ptr<flutter::TextureVariant> texture_;
   int64_t texture_id_ = -1;
   FlutterDesktopPixelBuffer pixel_buffer_ = {};
-  std::mutex video_mutex_;
-  std::vector<uint8_t> frame_buffer_;
-  std::vector<uint8_t> render_buffer_;
-
-  std::mutex state_mutex_;
-  int volume_ = 100;
-  std::string state_override_;
-  std::string error_description_;
 };
 
 // static
@@ -750,9 +530,9 @@ void VlcPlayerPlugin::HandleMethodCall(
   const auto *arguments = std::get_if<EncodableMap>(method_call.arguments());
 
   if (method_call.method_name() == "create") {
-    auto &api = LibVlcApi::Instance();
-    if (!api.available()) {
-      result->Error("vlc_not_found", api.error());
+    std::string runtime_error;
+    if (!ConfigureVlcRuntime(&runtime_error)) {
+      result->Error("vlc_not_found", runtime_error);
       return;
     }
 
@@ -835,6 +615,39 @@ void VlcPlayerPlugin::HandleMethodCall(
       return;
     }
     error = player->SetPlaybackSpeed(speed);
+  } else if (method_call.method_name() == "getAudioTracks") {
+    result->Success(EncodableValue(player->GetAudioTracks()));
+    return;
+  } else if (method_call.method_name() == "setAudioTrack") {
+    int64_t id = 0;
+    if (!ReadInt64(*arguments, "id", &id) || id < 0) {
+      result->Error("invalid_args",
+                    "A non-negative audio track id is required.");
+      return;
+    }
+    error = player->SetAudioTrack(static_cast<int>(id));
+  } else if (method_call.method_name() == "getSubtitleTracks") {
+    result->Success(EncodableValue(player->GetSubtitleTracks()));
+    return;
+  } else if (method_call.method_name() == "setSubtitleTrack") {
+    int64_t id = 0;
+    if (!ReadInt64(*arguments, "id", &id) || id < 0) {
+      result->Error("invalid_args",
+                    "A non-negative subtitle track id is required.");
+      return;
+    }
+    error = player->SetSubtitleTrack(static_cast<int>(id));
+  } else if (method_call.method_name() == "disableSubtitle") {
+    error = player->DisableSubtitle();
+  } else if (method_call.method_name() == "addSubtitle") {
+    error = player->AddSubtitle(ReadString(*arguments, "uri"));
+    if (error == "A non-empty subtitle uri is required.") {
+      result->Error("invalid_args", error);
+      return;
+    }
+  } else if (method_call.method_name() == "getMediaInfo") {
+    result->Success(EncodableValue(player->GetMediaInfo()));
+    return;
   } else {
     result->NotImplemented();
     return;
