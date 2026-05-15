@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include <windows.h>
 
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <variant>
@@ -22,21 +23,28 @@ using flutter::MethodResultFunctions;
 
 }  // namespace
 
-TEST(VlcPlayerPlugin, GetPlatformVersion) {
-  VlcPlayerPlugin plugin;
-  // Save the reply value from the success callback.
-  std::string result_string;
-  plugin.HandleMethodCall(
-      MethodCall("getPlatformVersion", std::make_unique<EncodableValue>()),
-      std::make_unique<MethodResultFunctions<>>(
-          [&result_string](const EncodableValue* result) {
-            result_string = std::get<std::string>(*result);
-          },
-          nullptr, nullptr));
+TEST(VlcPlayerPlugin, MissingPlayerReturnsPlayerNotFound) {
+  VlcPlayerPlugin plugin(nullptr, nullptr);
 
-  // Since the exact string varies by host, just ensure that it's a string
-  // with the expected format.
-  EXPECT_TRUE(result_string.rfind("Windows ", 0) == 0);
+  std::string error_code;
+  std::string error_message;
+  EncodableMap arguments;
+  arguments[EncodableValue("viewId")] = EncodableValue(int64_t{42});
+
+  plugin.HandleMethodCall(
+      MethodCall("play", std::make_unique<EncodableValue>(arguments)),
+      std::make_unique<MethodResultFunctions<>>(
+          nullptr,
+          [&error_code, &error_message](const std::string &code,
+                                        const std::string &message,
+                                        const EncodableValue *details) {
+            error_code = code;
+            error_message = message;
+          },
+          nullptr));
+
+  EXPECT_EQ(error_code, "player_not_found");
+  EXPECT_NE(error_message.find("viewId 42"), std::string::npos);
 }
 
 }  // namespace test

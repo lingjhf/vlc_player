@@ -27,6 +27,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   final Map<String, String> httpHeaders;
 
   int? _viewId;
+  int? _textureId;
   Uri? _pendingSource;
   bool _pendingAutoPlay = false;
   Map<String, String> _pendingHttpHeaders = const <String, String>{};
@@ -49,6 +50,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
 
     _viewId = viewId;
+    _textureId = null;
     _eventsSubscription = EventChannel(
       'vlc_player/events/$viewId',
     ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
@@ -60,6 +62,62 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
         autoPlay: _pendingAutoPlay,
         httpHeaders: _pendingHttpHeaders,
       );
+    }
+  }
+
+  @internal
+  Future<int> attachTextureForWindows() async {
+    _ensureNotDisposed();
+
+    final existingTextureId = _textureId;
+    if (_viewId != null && existingTextureId != null) {
+      return existingTextureId;
+    }
+
+    final oldViewId = _viewId;
+    await _eventsSubscription?.cancel();
+    _eventsSubscription = null;
+    if (oldViewId != null) {
+      await _disposeNativeView(oldViewId);
+    }
+
+    final response = await methodChannel.invokeMapMethod<String, Object?>(
+      'create',
+      <String, Object?>{'options': options},
+    );
+    final viewId = (response?['viewId'] as num?)?.toInt();
+    final textureId = (response?['textureId'] as num?)?.toInt();
+    if (viewId == null || textureId == null) {
+      throw StateError('Windows vlc_player creation returned invalid data.');
+    }
+
+    _viewId = viewId;
+    _textureId = textureId;
+    _eventsSubscription = EventChannel(
+      'vlc_player/events/$viewId',
+    ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
+
+    final pendingSource = _pendingSource;
+    if (pendingSource != null) {
+      await setSource(
+        pendingSource,
+        autoPlay: _pendingAutoPlay,
+        httpHeaders: _pendingHttpHeaders,
+      );
+    }
+
+    return textureId;
+  }
+
+  @internal
+  Future<void> detach() async {
+    final viewId = _viewId;
+    _viewId = null;
+    _textureId = null;
+    await _eventsSubscription?.cancel();
+    _eventsSubscription = null;
+    if (viewId != null) {
+      await _disposeNativeView(viewId);
     }
   }
 
@@ -164,6 +222,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _isDisposed = true;
     final viewId = _viewId;
     _viewId = null;
+    _textureId = null;
     _eventsSubscription?.cancel();
     _eventsSubscription = null;
     if (viewId != null) {

@@ -10,6 +10,7 @@ for loading media, playback controls, seeking, volume, speed, and state updates.
 - Android
 - iOS
 - macOS
+- Windows
 
 The plugin forwards media URIs to the native VLC library. It does not keep a
 Dart-side format allowlist or parse playlists in Dart.
@@ -42,7 +43,8 @@ flutter pub get
 ```
 
 Applications embedding this plugin must satisfy the binary distribution and
-license requirements for libVLC, MobileVLCKit, and VLCKit.
+license requirements for libVLC, MobileVLCKit, VLCKit, and the VLC Windows
+runtime.
 
 ## Platform setup
 
@@ -82,6 +84,15 @@ After changing the macOS podspec or Pods state, run:
 cd example/macos
 pod install
 ```
+
+### Windows
+
+The Windows implementation loads `libvlc.dll` dynamically at runtime. Install
+VLC on the target machine or bundle the VLC Windows runtime with the app so
+`libvlc.dll` and the VLC `plugins` directory can be found when the app starts.
+
+Windows video is rendered through a Flutter texture backed by libVLC video
+callbacks, so the Dart API is the same as the other platforms.
 
 ## Usage
 

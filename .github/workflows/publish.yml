@@ -82,9 +82,47 @@ jobs:
       - name: Validate pub.dev package
         run: flutter pub publish --dry-run
 
+  validate-windows:
+    name: Validate Windows release
+    runs-on: windows-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Verify tag matches pubspec version
+        shell: bash
+        run: |
+          version="$(grep '^version:' pubspec.yaml | awk '{print $2}')"
+          tag="$GITHUB_REF_NAME"
+          if [ "$version" != "$tag" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match pubspec version $version."
+            exit 1
+          fi
+
+      - name: Install package dependencies
+        run: flutter pub get
+
+      - name: Install example dependencies
+        working-directory: example
+        run: flutter pub get
+
+      - name: Build Windows example
+        working-directory: example
+        run: flutter build windows
+
   publish:
     name: Publish
-    needs: validate
+    needs:
+      - validate
+      - validate-windows
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

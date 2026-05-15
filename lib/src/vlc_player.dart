@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -19,6 +21,35 @@ class VlcPlayer extends StatefulWidget {
 }
 
 class _VlcPlayerState extends State<VlcPlayer> {
+  Future<int>? _windowsTextureId;
+
+  @override
+  void initState() {
+    super.initState();
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      _windowsTextureId = widget.controller.attachTextureForWindows();
+    }
+  }
+
+  @override
+  void didUpdateWidget(VlcPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (defaultTargetPlatform != TargetPlatform.windows ||
+        oldWidget.controller == widget.controller) {
+      return;
+    }
+    unawaited(oldWidget.controller.detach());
+    _windowsTextureId = widget.controller.attachTextureForWindows();
+  }
+
+  @override
+  void dispose() {
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      unawaited(widget.controller.detach());
+    }
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     if (defaultTargetPlatform == TargetPlatform.android) {
@@ -49,12 +80,36 @@ class _VlcPlayerState extends State<VlcPlayer> {
       );
     }
 
+    if (defaultTargetPlatform == TargetPlatform.windows) {
+      return ColoredBox(
+        color: widget.backgroundColor,
+        child: FutureBuilder<int>(
+          future: _windowsTextureId,
+          builder: (context, snapshot) {
+            final textureId = snapshot.data;
+            if (textureId != null) {
+              return Texture(textureId: textureId);
+            }
+            if (snapshot.hasError) {
+              return Center(
+                child: Text(
+                  snapshot.error.toString(),
+                  textAlign: TextAlign.center,
+                ),
+              );
+            }
+            return const Center(child: CircularProgressIndicator());
+          },
+        ),
+      );
+    }
+
     if (defaultTargetPlatform != TargetPlatform.macOS) {
       return ColoredBox(
         color: widget.backgroundColor,
         child: const Center(
           child: Text(
-            'vlc_player currently supports Android, iOS and macOS only.',
+            'vlc_player currently supports Android, iOS, macOS and Windows only.',
           ),
         ),
       );

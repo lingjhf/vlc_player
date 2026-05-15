@@ -88,6 +88,85 @@ void main() {
   });
 
   group('platform view lifecycle', () {
+    test('attachTextureForWindows creates a texture backed player', () async {
+      final controller = VlcPlayerController(
+        source: Uri.parse('https://example.com/video.mp4'),
+        autoPlay: true,
+      );
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'create') {
+              mockEventChannel(21);
+              return <String, Object?>{'viewId': 21, 'textureId': 99};
+            }
+            return null;
+          });
+
+      final textureId = await controller.attachTextureForWindows();
+
+      expect(textureId, 99);
+      expect(calls.map((call) => call.method), <String>['create', 'setSource']);
+      expect(calls[0].arguments, <String, Object?>{'options': <String>[]});
+      expect(calls[1].arguments, <String, Object?>{
+        'viewId': 21,
+        'uri': 'https://example.com/video.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('attachTextureForWindows reuses an existing texture player', () async {
+      final controller = VlcPlayerController();
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            mockEventChannel(22);
+            return <String, Object?>{'viewId': 22, 'textureId': 100};
+          });
+
+      final firstTextureId = await controller.attachTextureForWindows();
+      final secondTextureId = await controller.attachTextureForWindows();
+
+      expect(firstTextureId, 100);
+      expect(secondTextureId, 100);
+      expect(calls.map((call) => call.method), <String>['create']);
+
+      controller.dispose();
+    });
+
+    test('detach releases a texture backed player', () async {
+      final controller = VlcPlayerController();
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'create') {
+              mockEventChannel(23);
+              return <String, Object?>{'viewId': 23, 'textureId': 101};
+            }
+            return null;
+          });
+
+      await controller.attachTextureForWindows();
+      await controller.detach();
+
+      expect(calls.map((call) => call.method), <String>['create', 'dispose']);
+      expect(calls[1].arguments, <String, Object?>{'viewId': 23});
+
+      controller.dispose();
+    });
+
     test('attach with the same view id does not replay source', () async {
       final controller = VlcPlayerController(
         source: Uri.parse('https://example.com/video.mp4'),
