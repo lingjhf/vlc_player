@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.5.0 - 2026-05-16
+
+### Added
+
+- Added Dart-side playlist support with `setPlaylist()`, `next()`,
+  `previous()`, current playlist state, and optional auto advance on ended
+  playback.
+
 ## 0.4.0 - 2026-05-16
 
 ### Added

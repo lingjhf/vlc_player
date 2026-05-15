@@ -291,6 +291,296 @@ void main() {
     );
   });
 
+  group('playlist', () {
+    test('setPlaylist before attach replays the selected source', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(
+          uri: Uri.parse('https://example.com/two.mp4'),
+          mediaOptions: const <String>[':network-caching=1500'],
+          startPosition: const Duration(seconds: 4),
+        ),
+      ];
+
+      await controller.setPlaylist(sources, initialIndex: 1, autoPlay: true);
+      expect(calls, isEmpty);
+      expect(controller.playlist, sources);
+      expect(controller.playlistIndex, 1);
+      expect(controller.currentMediaSource, sources[1]);
+      expect(controller.hasNext, isFalse);
+      expect(controller.hasPrevious, isTrue);
+
+      mockEventChannel(51);
+      await controller.attach(51);
+
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 51,
+        'uri': 'https://example.com/two.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+        'mediaOptions': <String>[':network-caching=1500'],
+        'startPosition': 4000,
+      });
+
+      controller.dispose();
+    });
+
+    test(
+      'setPlaylist rejects empty lists and invalid initial indexes',
+      () async {
+        final controller = VlcPlayerController();
+        final sources = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        ];
+
+        await expectLater(
+          controller.setPlaylist(const <VlcMediaSource>[]),
+          throwsArgumentError,
+        );
+        await expectLater(
+          controller.setPlaylist(sources, initialIndex: -1),
+          throwsRangeError,
+        );
+        await expectLater(
+          controller.setPlaylist(sources, initialIndex: 1),
+          throwsRangeError,
+        );
+        expect(calls, isEmpty);
+
+        controller.dispose();
+      },
+    );
+
+    test('next and previous load playlist items and report bounds', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(52);
+      await controller.attach(52);
+      await controller.setPlaylist(sources);
+      calls.clear();
+
+      expect(await controller.next(), isTrue);
+      expect(controller.playlistIndex, 1);
+      expect(controller.hasNext, isFalse);
+      expect(controller.hasPrevious, isTrue);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 52,
+        'uri': 'https://example.com/two.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      calls.clear();
+      expect(await controller.next(), isFalse);
+      expect(calls, isEmpty);
+
+      expect(await controller.previous(autoPlay: false), isTrue);
+      expect(controller.playlistIndex, 0);
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 52,
+        'uri': 'https://example.com/one.mp4',
+        'autoPlay': false,
+        'httpHeaders': <String, String>{},
+      });
+
+      calls.clear();
+      expect(await controller.previous(), isFalse);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('next restores playlist state when native loading fails', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(55);
+      await controller.attach(55);
+      await controller.setPlaylist(sources);
+      calls.clear();
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'dispose') {
+              return null;
+            }
+            throw PlatformException(
+              code: VlcPlayerErrorCode.setSourceFailed,
+              message: 'failed',
+            );
+          });
+
+      await expectLater(controller.next(), throwsA(isA<VlcPlayerException>()));
+      expect(controller.playlistIndex, 0);
+      expect(controller.currentMediaSource, sources[0]);
+
+      controller.dispose();
+    });
+
+    test(
+      'setPlaylist restores previous playlist when native loading fails',
+      () async {
+        final controller = VlcPlayerController();
+        final first = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        ];
+        final second = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+        ];
+
+        mockEventChannel(56);
+        await controller.attach(56);
+        await controller.setPlaylist(first);
+        calls.clear();
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (call.method == 'dispose') {
+                return null;
+              }
+              throw PlatformException(
+                code: VlcPlayerErrorCode.setSourceFailed,
+                message: 'failed',
+              );
+            });
+
+        await expectLater(
+          controller.setPlaylist(second),
+          throwsA(isA<VlcPlayerException>()),
+        );
+        expect(controller.playlist, first);
+        expect(controller.playlistIndex, 0);
+        expect(controller.currentMediaSource, first[0]);
+
+        controller.dispose();
+      },
+    );
+
+    test('next and previous require a playlist', () async {
+      final controller = VlcPlayerController();
+
+      await expectLater(controller.next(), throwsStateError);
+      await expectLater(controller.previous(), throwsStateError);
+
+      controller.dispose();
+    });
+
+    test('setSource clears playlist state', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      await controller.setPlaylist(sources);
+      await controller.setSource(Uri.parse('https://example.com/single.mp4'));
+
+      expect(controller.playlist, isEmpty);
+      expect(controller.playlistIndex, isNull);
+      expect(controller.hasNext, isFalse);
+      expect(controller.hasPrevious, isFalse);
+      expect(
+        controller.currentMediaSource!.uri,
+        Uri.parse('https://example.com/single.mp4'),
+      );
+
+      controller.dispose();
+    });
+
+    test('ended events auto advance once to the next playlist item', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(53);
+      await controller.attach(53);
+      await controller.setPlaylist(sources, autoAdvance: true);
+      calls.clear();
+
+      final channel = EventChannel('vlc_player/events/53');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.playlistIndex, 1);
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 53,
+        'uri': 'https://example.com/two.mp4',
+        'autoPlay': true,
+        'httpHeaders': <String, String>{},
+      });
+
+      calls.clear();
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.playlistIndex, 1);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('autoAdvance can be disabled', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(54);
+      await controller.attach(54);
+      await controller.setPlaylist(sources, autoAdvance: false);
+      calls.clear();
+
+      final channel = EventChannel('vlc_player/events/54');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await Future<void>.delayed(Duration.zero);
+
+      expect(controller.playlistIndex, 0);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+  });
+
   group('platform view lifecycle', () {
     test('attachTexturePlayer creates a texture backed player', () async {
       final controller = VlcPlayerController(

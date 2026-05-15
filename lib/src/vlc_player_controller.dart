@@ -47,10 +47,29 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   int? _textureId;
   VlcMediaSource? _pendingMediaSource;
   bool _pendingAutoPlay = false;
+  List<VlcMediaSource> _playlist = const <VlcMediaSource>[];
+  int? _playlistIndex;
+  bool _playlistAutoAdvance = false;
   StreamSubscription<Object?>? _eventsSubscription;
   bool _isDisposed = false;
 
   bool get isAttached => _viewId != null;
+
+  List<VlcMediaSource> get playlist => _playlist;
+
+  int? get playlistIndex => _playlistIndex;
+
+  VlcMediaSource? get currentMediaSource => _pendingMediaSource;
+
+  bool get hasNext => switch (_playlistIndex) {
+    final int index => index + 1 < _playlist.length,
+    null => false,
+  };
+
+  bool get hasPrevious => switch (_playlistIndex) {
+    final int index => index > 0,
+    null => false,
+  };
 
   Future<void> attach(int viewId) async {
     _ensureNotDisposed();
@@ -159,6 +178,80 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false}) async {
+    _clearPlaylist();
+    return _setMedia(source, autoPlay: autoPlay);
+  }
+
+  Future<void> setPlaylist(
+    List<VlcMediaSource> sources, {
+    int initialIndex = 0,
+    bool autoPlay = false,
+    bool autoAdvance = true,
+  }) async {
+    _ensureNotDisposed();
+    if (sources.isEmpty) {
+      throw ArgumentError.value(sources, 'sources', 'Must be non-empty.');
+    }
+    RangeError.checkValidIndex(initialIndex, sources, 'initialIndex');
+
+    final previousPlaylist = _playlist;
+    final previousPlaylistIndex = _playlistIndex;
+    final previousPlaylistAutoAdvance = _playlistAutoAdvance;
+    final previousMediaSource = _pendingMediaSource;
+    final previousAutoPlay = _pendingAutoPlay;
+    _playlist = List<VlcMediaSource>.unmodifiable(sources);
+    _playlistIndex = initialIndex;
+    _playlistAutoAdvance = autoAdvance;
+    try {
+      await _setMedia(_playlist[initialIndex], autoPlay: autoPlay);
+    } catch (_) {
+      _playlist = previousPlaylist;
+      _playlistIndex = previousPlaylistIndex;
+      _playlistAutoAdvance = previousPlaylistAutoAdvance;
+      _pendingMediaSource = previousMediaSource;
+      _pendingAutoPlay = previousAutoPlay;
+      rethrow;
+    }
+  }
+
+  Future<bool> next({bool autoPlay = true}) {
+    return _moveInPlaylist(1, autoPlay: autoPlay);
+  }
+
+  Future<bool> previous({bool autoPlay = true}) {
+    return _moveInPlaylist(-1, autoPlay: autoPlay);
+  }
+
+  Future<bool> _moveInPlaylist(int delta, {required bool autoPlay}) async {
+    _ensureNotDisposed();
+    final index = _playlistIndex;
+    if (index == null) {
+      throw StateError('No playlist has been set.');
+    }
+
+    final nextIndex = index + delta;
+    if (nextIndex < 0 || nextIndex >= _playlist.length) {
+      return false;
+    }
+
+    _playlistIndex = nextIndex;
+    final previousMediaSource = _pendingMediaSource;
+    final previousAutoPlay = _pendingAutoPlay;
+    try {
+      await _setMedia(_playlist[nextIndex], autoPlay: autoPlay);
+    } catch (_) {
+      _playlistIndex = index;
+      _pendingMediaSource = previousMediaSource;
+      _pendingAutoPlay = previousAutoPlay;
+      rethrow;
+    }
+    return true;
+  }
+
+  Future<void> _setMedia(
+    VlcMediaSource source, {
+    required bool autoPlay,
+  }) async {
     _ensureNotDisposed();
     _pendingMediaSource = source;
     _pendingAutoPlay = autoPlay;
@@ -177,6 +270,12 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       if (source.startPosition > Duration.zero)
         'startPosition': source.startPosition.inMilliseconds,
     });
+  }
+
+  void _clearPlaylist() {
+    _playlist = const <VlcMediaSource>[];
+    _playlistIndex = null;
+    _playlistAutoAdvance = false;
   }
 
   Future<void> play() => _invoke('play');
@@ -327,7 +426,14 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     if (_isDisposed) {
       return;
     }
+    final previousState = value.state;
     value = VlcPlayerValue.fromEvent(event, value);
+    if (_playlistAutoAdvance &&
+        previousState != VlcPlaybackState.ended &&
+        value.state == VlcPlaybackState.ended &&
+        hasNext) {
+      unawaited(next());
+    }
   }
 
   void _handleEventError(Object error) {
