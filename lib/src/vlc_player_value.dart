@@ -2,6 +2,8 @@ import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart';
 
+import 'vlc_player_error.dart';
+
 enum VlcPlaybackState {
   idle,
   opening,
@@ -26,6 +28,7 @@ class VlcPlayerValue {
     this.isLive = false,
     this.videoSize,
     this.bufferingProgress,
+    this.error,
     this.errorDescription,
   });
 
@@ -39,6 +42,7 @@ class VlcPlayerValue {
   final bool isLive;
   final Size? videoSize;
   final double? bufferingProgress;
+  final VlcPlayerError? error;
   final String? errorDescription;
 
   bool get isPlaying => state == VlcPlaybackState.playing;
@@ -60,9 +64,24 @@ class VlcPlayerValue {
     bool clearVideoSize = false,
     double? bufferingProgress,
     bool clearBufferingProgress = false,
+    VlcPlayerError? error,
     String? errorDescription,
     bool clearError = false,
   }) {
+    final nextError = clearError
+        ? null
+        : error ??
+              (errorDescription == null
+                  ? this.error
+                  : VlcPlayerError(
+                      code: VlcPlayerErrorCode.playbackError,
+                      message: errorDescription,
+                    ));
+    final nextErrorDescription = clearError
+        ? null
+        : error != null
+        ? error.message
+        : errorDescription ?? this.errorDescription;
     return VlcPlayerValue(
       state: state ?? this.state,
       position: position ?? this.position,
@@ -76,9 +95,8 @@ class VlcPlayerValue {
       bufferingProgress: clearBufferingProgress
           ? null
           : bufferingProgress ?? this.bufferingProgress,
-      errorDescription: clearError
-          ? null
-          : errorDescription ?? this.errorDescription,
+      error: nextError,
+      errorDescription: nextErrorDescription,
     );
   }
 
@@ -94,6 +112,7 @@ class VlcPlayerValue {
     final bufferingProgress = hasBufferingProgress
         ? _normalizedProgress(event['bufferingProgress'])
         : null;
+    final error = _errorFromEvent(event);
 
     return previous.copyWith(
       state: state,
@@ -111,8 +130,9 @@ class VlcPlayerValue {
       clearBufferingProgress:
           (hasBufferingProgress && bufferingProgress == null) ||
           state != VlcPlaybackState.buffering,
-      errorDescription: event['errorDescription'] as String?,
-      clearError: event['errorDescription'] == null,
+      error: error,
+      errorDescription: error?.message,
+      clearError: error == null,
     );
   }
 
@@ -140,6 +160,24 @@ class VlcPlayerValue {
       return null;
     }
     return value.toDouble().clamp(0.0, 1.0).toDouble();
+  }
+
+  static VlcPlayerError? _errorFromEvent(Map<Object?, Object?> event) {
+    final rawError = event['error'];
+    if (rawError is Map) {
+      return VlcPlayerError.fromMap(rawError.cast<Object?, Object?>());
+    }
+
+    final code = event['errorCode'] as String?;
+    final description = event['errorDescription'] as String?;
+    if (code == null && description == null) {
+      return null;
+    }
+    return VlcPlayerError(
+      code: code ?? VlcPlayerErrorCode.playbackError,
+      message: description,
+      details: event['errorDetails'],
+    );
   }
 
   static bool _isReadyState(VlcPlaybackState state) {

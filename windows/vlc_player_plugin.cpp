@@ -456,6 +456,9 @@ class WindowsVlcPlayer {
           EncodableValue(snapshot.buffering_progress);
     }
     if (!snapshot.error_description.empty()) {
+      const std::string error_code =
+          snapshot.error_code.empty() ? "playback_error" : snapshot.error_code;
+      event[EncodableValue("errorCode")] = EncodableValue(error_code);
       event[EncodableValue("errorDescription")] =
           EncodableValue(snapshot.error_description);
     }

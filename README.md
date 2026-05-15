@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.2.0
+  vlc_player: ^0.3.0
 ```
 
 If you are using this repository directly:
@@ -184,6 +184,8 @@ await controller.setPlaybackSpeed(1.25);
 
 Playback commands require the controller to be attached to a `VlcPlayer`.
 Calling commands such as `play()` before attachment throws a `StateError`.
+Native platform failures throw `VlcPlayerException`, which exposes a structured
+`VlcPlayerError` with `code`, `message`, and `details`.
 
 `setSource()` can be called before attachment. The source is replayed when the
 platform view is created.
@@ -272,6 +274,7 @@ Fields:
 - `videoSize`: Current decoded video size when VLC exposes it.
 - `bufferingProgress`: Normalized buffering progress from `0.0` to `1.0` when
   the platform exposes it; otherwise `null`.
+- `error`: Structured native playback error, when available.
 - `errorDescription`: Native playback error text, when available.
 
 Convenience getters:

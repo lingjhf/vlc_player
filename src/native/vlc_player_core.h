@@ -88,6 +88,7 @@ class VlcPlayerCore {
   mutable std::mutex state_mutex_;
   int volume_ = 100;
   std::string state_override_;
+  std::string error_code_;
   std::string error_description_;
 };
 

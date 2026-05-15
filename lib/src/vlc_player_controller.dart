@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 import 'vlc_media_info.dart';
+import 'vlc_player_error.dart';
 import 'vlc_player_value.dart';
 
 class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
@@ -101,10 +102,9 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
     _ensureNotDisposed();
 
-    final response = await methodChannel.invokeMapMethod<String, Object?>(
-      'create',
-      <String, Object?>{'options': options},
-    );
+    final response = await _invokeNativeMap('create', <String, Object?>{
+      'options': options,
+    });
     final viewId = (response?['viewId'] as num?)?.toInt();
     final textureId = (response?['textureId'] as num?)?.toInt();
     if (viewId == null || textureId == null) {
@@ -165,7 +165,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       return;
     }
 
-    await methodChannel.invokeMethod<void>('setSource', <String, Object?>{
+    await _invokeNative<void>('setSource', <String, Object?>{
       'viewId': viewId,
       'uri': sourceValue,
       'autoPlay': autoPlay,
@@ -251,7 +251,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       throw StateError('The controller is not attached to a VlcPlayer.');
     }
 
-    return methodChannel.invokeMethod<void>(method, <String, Object?>{
+    return _invokeNative<void>(method, <String, Object?>{
       'viewId': viewId,
       if (arguments != null) ...arguments,
     });
@@ -264,10 +264,41 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       throw StateError('The controller is not attached to a VlcPlayer.');
     }
 
-    return methodChannel.invokeMethod<T>(method, <String, Object?>{
+    return _invokeNative<T>(method, <String, Object?>{
       'viewId': viewId,
       if (arguments != null) ...arguments,
     });
+  }
+
+  Future<T?> _invokeNative<T>(
+    String method,
+    Map<String, Object?> arguments,
+  ) async {
+    try {
+      return await methodChannel.invokeMethod<T>(method, arguments);
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        VlcPlayerException.fromPlatformException(error),
+        stackTrace,
+      );
+    }
+  }
+
+  Future<Map<String, Object?>?> _invokeNativeMap(
+    String method,
+    Map<String, Object?> arguments,
+  ) async {
+    try {
+      return await methodChannel.invokeMapMethod<String, Object?>(
+        method,
+        arguments,
+      );
+    } on PlatformException catch (error, stackTrace) {
+      Error.throwWithStackTrace(
+        VlcPlayerException.fromPlatformException(error),
+        stackTrace,
+      );
+    }
   }
 
   static List<VlcTrackDescription> _trackDescriptionsFrom(Object? value) {
@@ -297,9 +328,16 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     if (_isDisposed) {
       return;
     }
+    final playerError = error is PlatformException
+        ? VlcPlayerError.fromPlatformException(error)
+        : VlcPlayerError(
+            code: VlcPlayerErrorCode.eventChannelError,
+            message: error.toString(),
+          );
     value = value.copyWith(
       state: VlcPlaybackState.error,
-      errorDescription: error.toString(),
+      error: playerError,
+      errorDescription: playerError.message,
     );
   }
 

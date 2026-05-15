@@ -482,6 +482,73 @@ void main() {
         controller.dispose();
       },
     );
+
+    test('native command errors are wrapped as VlcPlayerException', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(15);
+      await controller.attach(15);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'dispose') {
+              return null;
+            }
+            throw PlatformException(
+              code: VlcPlayerErrorCode.playerNotFound,
+              message: 'No player',
+              details: <String, Object?>{'viewId': 15},
+            );
+          });
+
+      await expectLater(
+        controller.play(),
+        throwsA(
+          isA<VlcPlayerException>()
+              .having(
+                (error) => error.code,
+                'code',
+                VlcPlayerErrorCode.playerNotFound,
+              )
+              .having((error) => error.message, 'message', 'No player')
+              .having((error) => error.details, 'details', <String, Object?>{
+                'viewId': 15,
+              }),
+        ),
+      );
+
+      controller.dispose();
+    });
+  });
+
+  group('event errors', () {
+    test('event channel errors update the structured player error', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(16);
+      await controller.attach(16);
+
+      final channel = EventChannel('vlc_player/events/16');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeErrorEnvelope(
+              code: VlcPlayerErrorCode.playbackError,
+              message: 'Playback failed',
+              details: <String, Object?>{'viewId': 16},
+            ),
+            null,
+          );
+
+      expect(controller.value.state, VlcPlaybackState.error);
+      expect(controller.value.error!.code, VlcPlayerErrorCode.playbackError);
+      expect(controller.value.error!.message, 'Playback failed');
+      expect(controller.value.error!.details, <String, Object?>{'viewId': 16});
+      expect(controller.value.errorDescription, 'Playback failed');
+
+      controller.dispose();
+    });
   });
 
   group('tracks and media info', () {

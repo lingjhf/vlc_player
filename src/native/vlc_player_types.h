@@ -46,6 +46,7 @@ struct VlcSnapshot {
   int64_t video_width = 0;
   int64_t video_height = 0;
   double buffering_progress = -1.0;
+  std::string error_code;
   std::string error_description;
 };
 

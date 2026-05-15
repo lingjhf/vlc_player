@@ -81,6 +81,7 @@ std::string VlcPlayerCore::SetSource(const std::string& uri,
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
     state_override_ = "opening";
+    error_code_.clear();
     error_description_.clear();
   }
 
@@ -252,6 +253,10 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   if (!is_valid()) {
     std::lock_guard<std::mutex> lock(state_mutex_);
     snapshot.volume = volume_;
+    if (!error_description_.empty()) {
+      snapshot.error_code =
+          error_code_.empty() ? "create_failed" : error_code_;
+    }
     snapshot.error_description = error_description_;
     return snapshot;
   }
@@ -260,10 +265,12 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   {
     std::lock_guard<std::mutex> lock(state_mutex_);
     if (state == libvlc_Error) {
+      error_code_ = "playback_error";
       error_description_ = "VLC encountered an error while playing the media.";
     }
     snapshot.state = state_override_.empty() ? StateName(state) : state_override_;
     snapshot.volume = volume_;
+    snapshot.error_code = error_code_;
     snapshot.error_description = error_description_;
   }
   snapshot.position = NonNegative(player_->time());

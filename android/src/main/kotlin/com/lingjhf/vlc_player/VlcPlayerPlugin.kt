@@ -34,7 +34,7 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         val rawViewId = call.argument<Number>("viewId")
         if (rawViewId == null) {
-            result.error("missing_view_id", "Missing required argument: viewId.", null)
+            result.error("invalid_args", "A valid viewId is required.", null)
             return
         }
 
@@ -47,7 +47,7 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
         val player = players[viewId]
         if (player == null) {
-            result.error("unknown_view", "No vlc_player view found for id $viewId.", null)
+            result.error("player_not_found", "No vlc_player player exists for viewId $viewId.", null)
             return
         }
 
@@ -57,7 +57,7 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 val autoPlay = call.argument<Boolean>("autoPlay") == true
                 val httpHeaders = call.argument<Map<String, String>>("httpHeaders").orEmpty()
                 if (uri.isNullOrEmpty()) {
-                    result.error("invalid_uri", "Missing required argument: uri.", null)
+                    result.error("invalid_args", "A non-empty uri is required.", null)
                     return
                 }
                 player.setSource(uri, httpHeaders, autoPlay, result)

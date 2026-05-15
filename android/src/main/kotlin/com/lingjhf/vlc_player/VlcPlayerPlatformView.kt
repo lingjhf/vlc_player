@@ -35,6 +35,7 @@ internal class VlcPlayerPlatformView(
     private var volume = 100
     private var playbackSpeed = 1.0f
     private var bufferingProgress: Double? = null
+    private var errorCode: String? = null
     private var errorDescription: String? = null
     private var viewsAttached = false
     private var disposed = false
@@ -67,6 +68,7 @@ internal class VlcPlayerPlatformView(
             }
             mediaPlayer.media = media
             media.release()
+            errorCode = null
             errorDescription = null
             updateState(STATE_OPENING)
             if (autoPlay) {
@@ -74,9 +76,10 @@ internal class VlcPlayerPlatformView(
             }
             result.success(null)
         } catch (error: RuntimeException) {
+            errorCode = ERROR_SET_SOURCE_FAILED
             errorDescription = error.message
             updateState(STATE_ERROR)
-            result.error("set_source_failed", error.message, null)
+            result.error(ERROR_SET_SOURCE_FAILED, error.message, null)
         }
     }
 
@@ -304,6 +307,7 @@ internal class VlcPlayerPlatformView(
             }
             MediaPlayer.Event.EncounteredError -> {
                 bufferingProgress = null
+                errorCode = ERROR_PLAYBACK
                 errorDescription = "VLC encountered an error while playing the media."
                 updateState(STATE_ERROR)
             }
@@ -419,6 +423,7 @@ internal class VlcPlayerPlatformView(
             event["bufferingProgress"] = it
         }
         errorDescription?.let {
+            event["errorCode"] = errorCode ?: ERROR_PLAYBACK
             event["errorDescription"] = it
         }
         streamHandler.send(event)
@@ -470,6 +475,8 @@ internal class VlcPlayerPlatformView(
         const val STATE_STOPPED = "stopped"
         const val STATE_ENDED = "ended"
         const val STATE_ERROR = "error"
+        const val ERROR_PLAYBACK = "playback_error"
+        const val ERROR_SET_SOURCE_FAILED = "set_source_failed"
 
         fun isReadyState(state: String): Boolean {
             return state == STATE_PLAYING ||

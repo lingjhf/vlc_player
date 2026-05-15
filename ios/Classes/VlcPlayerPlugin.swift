@@ -354,7 +354,10 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
 
   func mediaPlayerStateChanged(_ aNotification: Notification) {
     if mediaPlayer.state == .error {
-      sendSnapshot(errorDescription: "VLC encountered an error while playing the media.")
+      sendSnapshot(
+        errorCode: "playback_error",
+        errorDescription: "VLC encountered an error while playing the media."
+      )
       return
     }
     sendSnapshot()
@@ -364,7 +367,11 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
     sendSnapshot()
   }
 
-  private func sendSnapshot(stateOverride: String? = nil, errorDescription: String? = nil) {
+  private func sendSnapshot(
+    stateOverride: String? = nil,
+    errorCode: String? = nil,
+    errorDescription: String? = nil
+  ) {
     guard !isDisposed else {
       return
     }
@@ -386,6 +393,7 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
       event["videoSize"] = videoSize
     }
     if let errorDescription {
+      event["errorCode"] = errorCode ?? "playback_error"
       event["errorDescription"] = errorDescription
     }
     eventHandler.send(event)

@@ -407,6 +407,10 @@ class LinuxVlcPlayer {
                                fl_value_new_float(snapshot.buffering_progress));
     }
     if (!snapshot.error_description.empty()) {
+      const std::string error_code =
+          snapshot.error_code.empty() ? "playback_error" : snapshot.error_code;
+      fl_value_set_string_take(event, "errorCode",
+                               fl_value_new_string(error_code.c_str()));
       fl_value_set_string_take(event, "errorDescription",
                                fl_value_new_string(snapshot.error_description.c_str()));
     }

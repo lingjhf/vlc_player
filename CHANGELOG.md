@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-05-16
+
+### Added
+
+- Added `VlcPlayerError`, `VlcPlayerException`, and structured
+  `VlcPlayerValue.error` playback errors.
+- Normalized native platform error codes for Dart-facing command failures and
+  playback error events.
+
 ## 0.2.0 - 2026-05-16
 
 ### Added

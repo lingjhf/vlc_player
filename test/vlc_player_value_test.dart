@@ -18,6 +18,7 @@ void main() {
       expect(value.isLive, isFalse);
       expect(value.videoSize, isNull);
       expect(value.bufferingProgress, isNull);
+      expect(value.error, isNull);
       expect(value.errorDescription, isNull);
     });
 
@@ -140,6 +141,55 @@ void main() {
       }, previous);
 
       expect(value.bufferingProgress, isNull);
+    });
+
+    test('parses structured playback errors and keeps errorDescription', () {
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'error',
+        'errorCode': 'playback_error',
+        'errorDescription': 'VLC failed',
+        'errorDetails': <String, Object?>{'state': 'error'},
+      }, const VlcPlayerValue());
+
+      expect(value.state, VlcPlaybackState.error);
+      expect(value.error, isNotNull);
+      expect(value.error!.code, VlcPlayerErrorCode.playbackError);
+      expect(value.error!.message, 'VLC failed');
+      expect(value.error!.details, <String, Object?>{'state': 'error'});
+      expect(value.errorDescription, 'VLC failed');
+      expect(value.hasError, isTrue);
+    });
+
+    test('parses nested error payloads', () {
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'error',
+        'error': <Object?, Object?>{
+          'code': 'set_source_failed',
+          'message': 'Bad media',
+        },
+      }, const VlcPlayerValue());
+
+      expect(value.error!.code, VlcPlayerErrorCode.setSourceFailed);
+      expect(value.error!.message, 'Bad media');
+      expect(value.errorDescription, 'Bad media');
+    });
+
+    test('clears structured errors on a normal event', () {
+      const previous = VlcPlayerValue(
+        state: VlcPlaybackState.error,
+        error: VlcPlayerError(
+          code: VlcPlayerErrorCode.playbackError,
+          message: 'VLC failed',
+        ),
+        errorDescription: 'VLC failed',
+      );
+
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'playing',
+      }, previous);
+
+      expect(value.error, isNull);
+      expect(value.errorDescription, isNull);
     });
   });
 }

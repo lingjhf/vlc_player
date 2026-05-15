@@ -85,7 +85,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.textContaining('PlatformException'), findsOneWidget);
+      expect(find.textContaining('VlcPlayerException'), findsOneWidget);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());
