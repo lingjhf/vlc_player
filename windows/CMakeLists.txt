@@ -114,7 +114,8 @@ if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/libvlc.dll" AND
   if(DEFINED BINARY_NAME)
     foreach(vlc_player_runtime_directory hrtfs locale lua plugins skins)
       if(EXISTS "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}")
-        add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+        add_custom_target(
+          ${PLUGIN_NAME}_copy_${vlc_player_runtime_directory} ALL
           COMMAND "${CMAKE_COMMAND}" -E copy_directory
           "${VLC_PLAYER_RUNTIME_DIR}/${vlc_player_runtime_directory}"
           "$<TARGET_FILE_DIR:${BINARY_NAME}>/${vlc_player_runtime_directory}")
