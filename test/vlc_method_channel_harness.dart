@@ -1,5 +1,6 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vlc_player/src/vlc_player_controller_internals.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 class VlcMethodChannelHarness {
@@ -17,15 +18,15 @@ class VlcMethodChannelHarness {
   }
 
   Future<void> attachController(VlcPlayerController controller, int viewId) {
-    return (controller as dynamic).attach(viewId) as Future<void>;
+    return (controller as VlcPlayerControllerInternals).attach(viewId);
   }
 
   Future<int> attachTexturePlayer(VlcPlayerController controller) {
-    return (controller as dynamic).attachTexturePlayer() as Future<int>;
+    return (controller as VlcPlayerControllerInternals).attachTexturePlayer();
   }
 
   Future<void> detachController(VlcPlayerController controller) {
-    return (controller as dynamic).detach() as Future<void>;
+    return (controller as VlcPlayerControllerInternals).detach();
   }
 
   void mockEventChannel(int viewId) {

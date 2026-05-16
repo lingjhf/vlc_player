@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import 'vlc_media_info.dart';
 import 'vlc_media_source.dart';
+import 'vlc_player_controller_internals.dart';
 import 'vlc_player_error.dart';
 import 'vlc_player_value.dart';
 
@@ -169,7 +170,8 @@ abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
 const MethodChannel _methodChannel = MethodChannel('vlc_player');
 
-class _VlcPlayerController extends VlcPlayerController {
+class _VlcPlayerController extends VlcPlayerController
+    implements VlcPlayerControllerInternals {
   _VlcPlayerController({
     VlcMediaSource? mediaSource,
     this.autoPlay = false,
@@ -238,6 +240,7 @@ class _VlcPlayerController extends VlcPlayerController {
   };
 
   /// Attaches this controller to a platform-view player instance.
+  @override
   Future<void> attach(int viewId) async {
     _ensureNotDisposed();
     if (_viewId == viewId) {
@@ -271,6 +274,7 @@ class _VlcPlayerController extends VlcPlayerController {
   }
 
   /// Attaches this controller to a texture-backed player instance.
+  @override
   @internal
   Future<int> attachTexturePlayer() async {
     _ensureNotDisposed();
@@ -320,6 +324,7 @@ class _VlcPlayerController extends VlcPlayerController {
   }
 
   /// Detaches and disposes the native player instance, if one is attached.
+  @override
   @internal
   Future<void> detach() async {
     final viewId = _viewId;

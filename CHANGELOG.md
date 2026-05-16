@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.7.24 - 2026-05-17
+
+### Changed
+
+- Replaced dynamic widget-to-controller internal calls with an unexported typed
+  internal controller contract, keeping the application-facing API unchanged
+  while making attachment wiring statically checked.
+
 ## 0.7.23 - 2026-05-17
 
 ### Added

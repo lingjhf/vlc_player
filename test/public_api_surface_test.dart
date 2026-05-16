@@ -12,6 +12,10 @@ void main() {
     expect(library, contains("export 'src/vlc_player_value.dart';"));
     expect(library, contains("export 'src/vlc_media_info.dart';"));
     expect(library, contains("export 'src/vlc_player_error.dart';"));
+    expect(
+      library,
+      isNot(contains("export 'src/vlc_player_controller_internals.dart';")),
+    );
     expect(library, isNot(contains("export 'src/texture")));
     expect(library, isNot(contains("export 'src/method_channel")));
   });
@@ -66,6 +70,16 @@ void main() {
     expect(controllerReference, isNot(contains('setSource(')));
     expect(controllerReference, isNot(contains('Uri? source')));
     expect(controllerReference, isNot(contains('httpHeaders` compatibility')));
+  });
+
+  test('widget-to-controller internals stay statically typed', () {
+    final player = _fileText('lib/src/vlc_player.dart');
+    final harness = _fileText('test/vlc_method_channel_harness.dart');
+
+    expect(player, contains('VlcPlayerControllerInternals'));
+    expect(harness, contains('VlcPlayerControllerInternals'));
+    expect(player, isNot(contains('as dynamic')));
+    expect(harness, isNot(contains('as dynamic')));
   });
 }
 

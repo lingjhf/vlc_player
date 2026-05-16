@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'vlc_player_controller.dart';
+import 'vlc_player_controller_internals.dart';
 
 const String _viewType = 'plugins.lingjhf.com/vlc_player/view';
 
@@ -167,14 +168,14 @@ class _VlcPlayerState extends State<VlcPlayer> {
   }
 
   Future<void> _attachPlatformView(VlcPlayerController controller, int viewId) {
-    return (controller as dynamic).attach(viewId) as Future<void>;
+    return (controller as VlcPlayerControllerInternals).attach(viewId);
   }
 
   Future<int> _attachTextureBackedPlayer(VlcPlayerController controller) {
-    return (controller as dynamic).attachTexturePlayer() as Future<int>;
+    return (controller as VlcPlayerControllerInternals).attachTexturePlayer();
   }
 
   Future<void> _detachPlayer(VlcPlayerController controller) {
-    return (controller as dynamic).detach() as Future<void>;
+    return (controller as VlcPlayerControllerInternals).detach();
   }
 }
