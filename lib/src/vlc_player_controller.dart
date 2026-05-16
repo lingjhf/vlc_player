@@ -102,7 +102,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
     final pendingMediaSource = _pendingMediaSource;
     if (pendingMediaSource != null) {
-      await setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
+      await _setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
       _ensureNotDisposed();
     }
   }
@@ -152,7 +152,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
     final pendingMediaSource = _pendingMediaSource;
     if (pendingMediaSource != null) {
-      await setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
+      await _setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
       _ensureNotDisposed();
     }
 

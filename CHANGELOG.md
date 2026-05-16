@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.2 - 2026-05-16
+
+### Fixed
+
+- Preserve playlist state when a pending playlist item is replayed during
+  platform view or texture attachment.
+
 ## 0.7.1 - 2026-05-16
 
 ### Fixed

@@ -323,9 +323,60 @@ void main() {
         'mediaOptions': <String>[':network-caching=1500'],
         'startPosition': 4000,
       });
+      expect(controller.playlist, sources);
+      expect(controller.playlistIndex, 1);
+      expect(controller.currentMediaSource, sources[1]);
+      expect(controller.hasNext, isFalse);
+      expect(controller.hasPrevious, isTrue);
 
       controller.dispose();
     });
+
+    test(
+      'setPlaylist before texture attach preserves playlist after replay',
+      () async {
+        final controller = VlcPlayerController();
+        final sources = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+          VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+        ];
+
+        await controller.setPlaylist(sources, initialIndex: 1, autoPlay: true);
+        expect(calls, isEmpty);
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (call.method == 'create') {
+                mockEventChannel(61);
+                return <String, Object?>{'viewId': 61, 'textureId': 161};
+              }
+              return null;
+            });
+
+        await controller.attachTexturePlayer();
+
+        expect(calls.map((call) => call.method), <String>[
+          'create',
+          'setSource',
+        ]);
+        expect(calls[1].arguments, <String, Object?>{
+          'viewId': 61,
+          'uri': 'https://example.com/two.mp4',
+          'autoPlay': true,
+          'httpHeaders': <String, String>{},
+        });
+        expect(controller.playlist, sources);
+        expect(controller.playlistIndex, 1);
+        expect(controller.currentMediaSource, sources[1]);
+        expect(controller.hasNext, isFalse);
+        expect(controller.hasPrevious, isTrue);
+
+        controller.dispose();
+      },
+    );
 
     test(
       'setPlaylist rejects empty lists and invalid initial indexes',
