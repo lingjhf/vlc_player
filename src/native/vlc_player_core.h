@@ -2,6 +2,7 @@
 #define VLC_PLAYER_NATIVE_VLC_PLAYER_CORE_H_
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -53,6 +54,17 @@ class VlcPlayerCore {
   bool CopyPixels(const uint8_t** out_buffer, uint32_t* width, uint32_t* height);
   void Dispose();
 
+#ifdef VLC_PLAYER_TESTING
+  void ResizeVideoBufferForTesting(uint32_t width,
+                                   uint32_t height,
+                                   uint32_t pitch);
+  void SimulateFrameForTesting(uint8_t value);
+  const uint8_t* FrameBufferDataForTesting() const;
+  size_t FrameBufferSizeForTesting() const;
+  uint64_t RenderGenerationForTesting() const;
+  uint64_t TextureGenerationForTesting() const;
+#endif  // VLC_PLAYER_TESTING
+
  private:
   uint32_t SetupFormat(char* chroma,
                        uint32_t* width,
@@ -86,6 +98,9 @@ class VlcPlayerCore {
   std::vector<uint8_t> texture_buffer_;
   uint32_t video_width_ = 0;
   uint32_t video_height_ = 0;
+  uint32_t video_pitch_ = 0;
+  uint64_t render_generation_ = 0;
+  uint64_t texture_generation_ = 0;
 
   mutable std::mutex state_mutex_;
   int volume_ = 100;

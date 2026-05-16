@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.20 - 2026-05-17
+
+### Changed
+
+- Reduced desktop texture-frame buffer churn by reusing same-size video buffers
+  and copying rendered pixels only when a new frame generation is available.
+- Added shared native tests for desktop frame buffer reuse and texture copy
+  generation tracking.
+
 ## 0.7.19 - 2026-05-17
 
 ### Changed

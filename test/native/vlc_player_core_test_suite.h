@@ -85,6 +85,54 @@ TEST(VlcPlayerCore, CopyPixelsWithoutFrameReturnsFalse) {
   EXPECT_EQ(height, 9u);
 }
 
+TEST(VlcPlayerCore, ResizeVideoBufferReusesUnchangedBuffers) {
+  auto core = MakeCore();
+
+  ASSERT_TRUE(core->is_valid()) << core->error();
+
+  core->ResizeVideoBufferForTesting(4, 4, 16);
+  const uint8_t* frame_data = core->FrameBufferDataForTesting();
+  const size_t frame_size = core->FrameBufferSizeForTesting();
+
+  core->ResizeVideoBufferForTesting(4, 4, 16);
+
+  EXPECT_EQ(core->FrameBufferDataForTesting(), frame_data);
+  EXPECT_EQ(core->FrameBufferSizeForTesting(), frame_size);
+  EXPECT_EQ(core->RenderGenerationForTesting(), 0u);
+  EXPECT_EQ(core->TextureGenerationForTesting(), 0u);
+}
+
+TEST(VlcPlayerCore, CopyPixelsCopiesOnlyNewRenderGenerations) {
+  auto core = MakeCore();
+  const uint8_t* buffer = nullptr;
+  uint32_t width = 0;
+  uint32_t height = 0;
+
+  ASSERT_TRUE(core->is_valid()) << core->error();
+
+  core->ResizeVideoBufferForTesting(2, 2, 8);
+  core->SimulateFrameForTesting(17);
+
+  EXPECT_TRUE(core->CopyPixels(&buffer, &width, &height));
+  EXPECT_EQ(width, 2u);
+  EXPECT_EQ(height, 2u);
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(buffer[0], 17u);
+  EXPECT_EQ(core->TextureGenerationForTesting(),
+            core->RenderGenerationForTesting());
+
+  const auto copied_generation = core->TextureGenerationForTesting();
+  EXPECT_TRUE(core->CopyPixels(&buffer, &width, &height));
+  EXPECT_EQ(core->TextureGenerationForTesting(), copied_generation);
+
+  core->SimulateFrameForTesting(23);
+  EXPECT_TRUE(core->CopyPixels(&buffer, &width, &height));
+  ASSERT_NE(buffer, nullptr);
+  EXPECT_EQ(buffer[0], 23u);
+  EXPECT_EQ(core->TextureGenerationForTesting(),
+            core->RenderGenerationForTesting());
+}
+
 TEST(VlcPlayerCore, DisposeIsIdempotentAndGuardsCommands) {
   auto core = MakeCore();
 

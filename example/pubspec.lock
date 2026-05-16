@@ -253,7 +253,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "0.7.19"
+    version: "0.7.20"
   vm_service:
     dependency: transitive
     description:

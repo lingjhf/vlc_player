@@ -317,7 +317,10 @@ bool VlcPlayerCore::CopyPixels(const uint8_t** out_buffer,
   if (render_buffer_.empty()) {
     return false;
   }
-  texture_buffer_ = render_buffer_;
+  if (texture_generation_ != render_generation_) {
+    texture_buffer_ = render_buffer_;
+    texture_generation_ = render_generation_;
+  }
   *out_buffer = texture_buffer_.data();
   *width = video_width_;
   *height = video_height_;
@@ -366,7 +369,8 @@ void VlcPlayerCore::Unlock(void* picture, void* const* planes) {
   if (picture == nullptr) {
     return;
   }
-  render_buffer_ = frame_buffer_;
+  std::swap(frame_buffer_, render_buffer_);
+  ++render_generation_;
   video_mutex_.unlock();
 }
 
@@ -380,12 +384,58 @@ void VlcPlayerCore::ResizeVideoBuffer(uint32_t width,
                                       uint32_t height,
                                       uint32_t pitch) {
   std::lock_guard<std::mutex> lock(video_mutex_);
+  const auto buffer_size = static_cast<size_t>(pitch) * height;
+  if (video_width_ == width && video_height_ == height &&
+      video_pitch_ == pitch && frame_buffer_.size() == buffer_size) {
+    return;
+  }
   video_width_ = width;
   video_height_ = height;
-  frame_buffer_.assign(static_cast<size_t>(pitch) * height, 0);
-  render_buffer_ = frame_buffer_;
-  texture_buffer_ = frame_buffer_;
+  video_pitch_ = pitch;
+  frame_buffer_.assign(buffer_size, 0);
+  render_buffer_.assign(buffer_size, 0);
+  texture_buffer_.assign(buffer_size, 0);
+  render_generation_ = 0;
+  texture_generation_ = 0;
 }
+
+#ifdef VLC_PLAYER_TESTING
+void VlcPlayerCore::ResizeVideoBufferForTesting(uint32_t width,
+                                                uint32_t height,
+                                                uint32_t pitch) {
+  ResizeVideoBuffer(width, height, pitch);
+}
+
+void VlcPlayerCore::SimulateFrameForTesting(uint8_t value) {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  if (frame_buffer_.empty()) {
+    return;
+  }
+  std::fill(frame_buffer_.begin(), frame_buffer_.end(), value);
+  std::swap(frame_buffer_, render_buffer_);
+  ++render_generation_;
+}
+
+const uint8_t* VlcPlayerCore::FrameBufferDataForTesting() const {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  return frame_buffer_.data();
+}
+
+size_t VlcPlayerCore::FrameBufferSizeForTesting() const {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  return frame_buffer_.size();
+}
+
+uint64_t VlcPlayerCore::RenderGenerationForTesting() const {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  return render_generation_;
+}
+
+uint64_t VlcPlayerCore::TextureGenerationForTesting() const {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  return texture_generation_;
+}
+#endif  // VLC_PLAYER_TESTING
 
 std::string VlcPlayerCore::ActiveError() const {
   if (disposed_.load()) {
