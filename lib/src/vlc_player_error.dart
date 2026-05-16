@@ -19,8 +19,8 @@ class VlcPlayerError {
 
   factory VlcPlayerError.fromMap(Map<Object?, Object?> map) {
     return VlcPlayerError(
-      code: map['code'] as String? ?? VlcPlayerErrorCode.playbackError,
-      message: map['message'] as String?,
+      code: _stringValue(map['code']) ?? VlcPlayerErrorCode.playbackError,
+      message: _stringValue(map['message']),
       details: map['details'],
     );
   }
@@ -58,6 +58,8 @@ class VlcPlayerError {
     }
     return 'VlcPlayerError($code, $message)';
   }
+
+  static String? _stringValue(Object? value) => value is String ? value : null;
 }
 
 class VlcPlayerException implements Exception {

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.4 - 2026-05-16
+
+### Fixed
+
+- Hardened Dart-side platform event parsing so malformed native payload fields
+  are ignored instead of throwing during event handling.
+
 ## 0.7.3 - 2026-05-16
 
 ### Changed

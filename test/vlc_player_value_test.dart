@@ -48,6 +48,60 @@ void main() {
       expect(value.bufferingProgress, 0.42);
     });
 
+    test('accepts numeric variants from platform event channels', () {
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'playing',
+        'position': 1200.6,
+        'duration': 10000.4,
+        'volume': 80.6,
+        'playbackSpeed': 2,
+        'videoSize': <String, Object?>{'width': 1920.5, 'height': 1080},
+      }, const VlcPlayerValue());
+
+      expect(value.position, const Duration(milliseconds: 1201));
+      expect(value.duration, const Duration(milliseconds: 10000));
+      expect(value.volume, 81);
+      expect(value.playbackSpeed, 2.0);
+      expect(value.videoSize, const Size(1920.5, 1080));
+    });
+
+    test('ignores malformed platform event fields without throwing', () {
+      const previous = VlcPlayerValue(
+        state: VlcPlaybackState.playing,
+        position: Duration(seconds: 3),
+        duration: Duration(seconds: 30),
+        volume: 55,
+        playbackSpeed: 1.5,
+        isReady: true,
+        isSeekable: true,
+        isLive: true,
+      );
+
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 3,
+        'position': '5000',
+        'duration': double.nan,
+        'volume': '80',
+        'playbackSpeed': Object(),
+        'isReady': 'true',
+        'isSeekable': 1,
+        'isLive': 'false',
+        'errorCode': 42,
+        'errorDescription': Object(),
+      }, previous);
+
+      expect(value.state, VlcPlaybackState.playing);
+      expect(value.position, const Duration(seconds: 3));
+      expect(value.duration, const Duration(seconds: 30));
+      expect(value.volume, 55);
+      expect(value.playbackSpeed, 1.5);
+      expect(value.isReady, isTrue);
+      expect(value.isSeekable, isTrue);
+      expect(value.isLive, isTrue);
+      expect(value.error, isNull);
+      expect(value.errorDescription, isNull);
+    });
+
     test('keeps optional fields when an event omits them', () {
       const previous = VlcPlayerValue(
         state: VlcPlaybackState.playing,
@@ -105,8 +159,8 @@ void main() {
       final value = VlcPlayerValue.fromEvent(<String, Object?>{
         'state': 'buffering',
         'position': -1,
-        'duration': -1,
-        'videoSize': <String, Object?>{'width': 0, 'height': 360},
+        'duration': double.nan,
+        'videoSize': <String, Object?>{'width': 'wide', 'height': 360},
         'bufferingProgress': double.nan,
       }, previous);
 

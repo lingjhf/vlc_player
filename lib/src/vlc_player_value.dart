@@ -105,7 +105,8 @@ class VlcPlayerValue {
       return previous;
     }
 
-    final state = _stateFromString(event['state'] as String?) ?? previous.state;
+    final state =
+        _stateFromString(_stringValue(event['state'])) ?? previous.state;
     final hasVideoSize = event.containsKey('videoSize');
     final videoSize = hasVideoSize ? _sizeFromMap(event['videoSize']) : null;
     final hasBufferingProgress = event.containsKey('bufferingProgress');
@@ -118,11 +119,11 @@ class VlcPlayerValue {
       state: state,
       position: _durationFromMilliseconds(event['position']),
       duration: _durationFromMilliseconds(event['duration']),
-      volume: event['volume'] as int?,
-      playbackSpeed: (event['playbackSpeed'] as num?)?.toDouble(),
-      isReady: event['isReady'] as bool? ?? _isReadyState(state),
-      isSeekable: event['isSeekable'] as bool?,
-      isLive: event['isLive'] as bool?,
+      volume: _intValue(event['volume']),
+      playbackSpeed: _doubleValue(event['playbackSpeed']),
+      isReady: _boolValue(event['isReady']) ?? _isReadyState(state),
+      isSeekable: _boolValue(event['isSeekable']),
+      isLive: _boolValue(event['isLive']),
       videoSize: videoSize,
       clearVideoSize:
           (hasVideoSize && videoSize == null) || _clearsVideoSize(state),
@@ -137,7 +138,7 @@ class VlcPlayerValue {
   }
 
   static Duration? _durationFromMilliseconds(Object? value) {
-    if (value is! num || value < 0) {
+    if (value is! num || value < 0 || !value.isFinite) {
       return null;
     }
     return Duration(milliseconds: value.round());
@@ -147,8 +148,8 @@ class VlcPlayerValue {
     if (value is! Map) {
       return null;
     }
-    final width = (value['width'] as num?)?.toDouble();
-    final height = (value['height'] as num?)?.toDouble();
+    final width = _doubleValue(value['width']);
+    final height = _doubleValue(value['height']);
     if (width == null || height == null || width <= 0 || height <= 0) {
       return null;
     }
@@ -168,8 +169,8 @@ class VlcPlayerValue {
       return VlcPlayerError.fromMap(rawError.cast<Object?, Object?>());
     }
 
-    final code = event['errorCode'] as String?;
-    final description = event['errorDescription'] as String?;
+    final code = _stringValue(event['errorCode']);
+    final description = _stringValue(event['errorDescription']);
     if (code == null && description == null) {
       return null;
     }
@@ -198,6 +199,27 @@ class VlcPlayerValue {
       _ => false,
     };
   }
+
+  static String? _stringValue(Object? value) => value is String ? value : null;
+
+  static int? _intValue(Object? value) {
+    if (value is int) {
+      return value;
+    }
+    if (value is num && value.isFinite) {
+      return value.round();
+    }
+    return null;
+  }
+
+  static double? _doubleValue(Object? value) {
+    if (value is! num || !value.isFinite) {
+      return null;
+    }
+    return value.toDouble();
+  }
+
+  static bool? _boolValue(Object? value) => value is bool ? value : null;
 
   static VlcPlaybackState? _stateFromString(String? value) {
     return switch (value) {

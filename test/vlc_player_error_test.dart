@@ -17,6 +17,19 @@ void main() {
       expect(error.description, 'Missing track');
     });
 
+    test('ignores malformed map code and message fields', () {
+      final error = VlcPlayerError.fromMap(<Object?, Object?>{
+        'code': 7,
+        'message': Object(),
+        'details': <String, Object?>{'raw': true},
+      });
+
+      expect(error.code, VlcPlayerErrorCode.playbackError);
+      expect(error.message, isNull);
+      expect(error.details, <String, Object?>{'raw': true});
+      expect(error.description, VlcPlayerErrorCode.playbackError);
+    });
+
     test('parses platform exceptions', () {
       final error = VlcPlayerError.fromPlatformException(
         PlatformException(

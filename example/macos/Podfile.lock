@@ -1,6 +1,6 @@
 PODS:
   - FlutterMacOS (1.0.0)
-  - vlc_player (0.7.3):
+  - vlc_player (0.7.4):
     - FlutterMacOS
     - VLCKit
   - VLCKit (3.7.3)
@@ -21,7 +21,7 @@ EXTERNAL SOURCES:
 
 SPEC CHECKSUMS:
   FlutterMacOS: d0db08ddef1a9af05a5ec4b724367152bb0500b1
-  vlc_player: d1d1ec463ea7d7de043b0354a9392f7ffdc741a8
+  vlc_player: e4cb211eab70ade916683b5d1a916b9652c67525
   VLCKit: 4f2c462daaab6de88b93ab7609bdefbada557a4d
 
 PODFILE CHECKSUM: 0af13ea7a15fad8c02a495a737daafd743f372ad
