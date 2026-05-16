@@ -20,13 +20,32 @@ Playback support depends on the platform VLC library and the codecs used by the
 media source. Common VLC-supported sources include MP4, MOV, MKV, WebM, AVI,
 FLV, MPEG-TS, HLS (`.m3u8`), DASH, RTSP, and RTP.
 
+## Tested format coverage
+
+The repository includes local integration fixtures for MP4, HLS/M3U8 with a
+local MPEG-TS segment, external SRT subtitles, MOV, MKV, WebM, MPEG-TS, MP3,
+AAC/M4A, FLAC, Ogg Vorbis, and Opus.
+
+Run the full format suite from the example app:
+
+```sh
+cd example
+flutter drive --no-dds --timeout=1200 -d macos \
+  --driver=test_driver/integration_test.dart \
+  --target=integration_test/format_compatibility_test.dart
+```
+
+CI runs the `smoke` format suite on Android and iOS and the full suite on
+desktop runners. To run a smaller local subset, pass
+`--dart-define=VLC_PLAYER_FORMAT_SUITE=smoke`, `video`, or `audio`.
+
 ## Installation
 
 Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.12
+  vlc_player: ^0.7.13
 ```
 
 If you are using this repository directly:

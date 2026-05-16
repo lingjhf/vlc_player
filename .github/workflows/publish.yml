@@ -75,6 +75,7 @@ jobs:
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
           flutter test -d "$DEVICE_ID" integration_test/plugin_integration_test.dart
+          flutter test -d "$DEVICE_ID" --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke integration_test/format_compatibility_test.dart
 
       - name: Build macOS example
         working-directory: example
@@ -84,6 +85,11 @@ jobs:
         working-directory: example
         timeout-minutes: 20
         run: flutter drive --no-dds --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
+      - name: Run macOS format compatibility tests
+        working-directory: example
+        timeout-minutes: 20
+        run: flutter drive --no-dds --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   validate-android:
     name: Validate Android release
@@ -139,7 +145,9 @@ jobs:
           arch: x86_64
           profile: pixel_6
           working-directory: example
-          script: flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+          script: |
+            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+            flutter drive --no-dds --timeout=1200 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   validate-windows:
     name: Validate Windows release
@@ -184,6 +192,10 @@ jobs:
       - name: Run Windows integration tests
         working-directory: example
         run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
+      - name: Run Windows format compatibility tests
+        working-directory: example
+        run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   validate-linux:
     name: Validate Linux release
@@ -235,6 +247,10 @@ jobs:
       - name: Run Linux integration tests
         working-directory: example
         run: xvfb-run -a flutter drive --no-dds --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+
+      - name: Run Linux format compatibility tests
+        working-directory: example
+        run: xvfb-run -a flutter drive --no-dds --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   publish:
     name: Publish

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.13 - 2026-05-16
+
+### Added
+
+- Added CI coverage for local format compatibility integration tests, with
+  smoke coverage on mobile runners and full coverage on desktop runners.
+
 ## 0.7.12 - 2026-05-16
 
 ### Added

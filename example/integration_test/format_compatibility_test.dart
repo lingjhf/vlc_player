@@ -7,40 +7,34 @@ import 'package:integration_test/integration_test.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 const String _assetRoot = 'assets/format_fixtures';
+const String _formatSuite = String.fromEnvironment(
+  'VLC_PLAYER_FORMAT_SUITE',
+  defaultValue: 'all',
+);
 
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
-  group('format compatibility', () {
-    for (final format in _smokeFormats) {
+  group('format compatibility ($_formatSuite)', () {
+    for (final format in _formatsForSuite(_formatSuite)) {
       testWidgets('loads ${format.name}', (WidgetTester tester) async {
         await _runFormatCase(tester, format);
       });
     }
 
-    for (final format in _videoContainerFormats) {
-      testWidgets('loads ${format.name}', (WidgetTester tester) async {
-        await _runFormatCase(tester, format);
+    if (_includesSubtitleCase(_formatSuite)) {
+      testWidgets('adds an external SRT subtitle', (WidgetTester tester) async {
+        await _runFormatCase(
+          tester,
+          const _FormatCase(
+            name: 'MP4 with SRT subtitle',
+            assetPath: '$_assetRoot/video.mp4',
+            expectsVideo: true,
+            subtitleAssetPath: '$_assetRoot/captions.srt',
+          ),
+        );
       });
     }
-
-    for (final format in _audioFormats) {
-      testWidgets('loads ${format.name}', (WidgetTester tester) async {
-        await _runFormatCase(tester, format);
-      });
-    }
-
-    testWidgets('adds an external SRT subtitle', (WidgetTester tester) async {
-      await _runFormatCase(
-        tester,
-        const _FormatCase(
-          name: 'MP4 with SRT subtitle',
-          assetPath: '$_assetRoot/video.mp4',
-          expectsVideo: true,
-          subtitleAssetPath: '$_assetRoot/captions.srt',
-        ),
-      );
-    });
   });
 }
 
@@ -108,6 +102,31 @@ const List<_FormatCase> _audioFormats = <_FormatCase>[
     expectsAudio: true,
   ),
 ];
+
+List<_FormatCase> _formatsForSuite(String suite) {
+  switch (suite) {
+    case 'all':
+      return <_FormatCase>[
+        ..._smokeFormats,
+        ..._videoContainerFormats,
+        ..._audioFormats,
+      ];
+    case 'smoke':
+      return _smokeFormats;
+    case 'video':
+      return <_FormatCase>[..._smokeFormats, ..._videoContainerFormats];
+    case 'audio':
+      return _audioFormats;
+  }
+  throw ArgumentError.value(
+    suite,
+    'VLC_PLAYER_FORMAT_SUITE',
+    'Use all, smoke, video, or audio.',
+  );
+}
+
+bool _includesSubtitleCase(String suite) =>
+    suite == 'all' || suite == 'smoke' || suite == 'video';
 
 class _FormatCase {
   const _FormatCase({
