@@ -36,6 +36,15 @@ class VlcMethodChannelHarness {
         );
   }
 
+  Future<void> sendEvents(
+    int viewId,
+    Iterable<Map<String, Object?>> events,
+  ) async {
+    for (final event in events) {
+      await sendEvent(viewId, event);
+    }
+  }
+
   Future<void> sendError(
     int viewId, {
     required String code,

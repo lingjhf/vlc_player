@@ -24,11 +24,18 @@ Future<void> openExampleTile(WidgetTester tester, String key) async {
 Future<void> pumpUntil(
   WidgetTester tester,
   bool Function() condition, {
+  String description = 'condition',
   int attempts = 40,
   Duration interval = const Duration(milliseconds: 250),
 }) async {
   for (var attempt = 0; attempt < attempts && !condition(); attempt += 1) {
     await tester.pump(interval);
+  }
+  if (!condition()) {
+    fail(
+      'Timed out waiting for $description after '
+      '${attempts * interval.inMilliseconds}ms.',
+    );
   }
 }
 
@@ -45,9 +52,7 @@ List<String> headlessPlayerOptions({bool requiresAudio = false}) {
 }
 
 Future<Uri> materializeAsset(String assetPath) async {
-  final directory = await Directory.systemTemp.createTemp(
-    'vlc_player_format_fixture_',
-  );
+  final directory = await _createFixtureDirectory('vlc_player_format_fixture_');
   final file = File(
     '${directory.path}${Platform.pathSeparator}${assetPath.split('/').last}',
   );
@@ -59,9 +64,7 @@ Future<Uri> materializeHlsFixture({
   required String playlistAssetPath,
   required String segmentAssetPath,
 }) async {
-  final directory = await Directory.systemTemp.createTemp(
-    'vlc_player_hls_fixture_',
-  );
+  final directory = await _createFixtureDirectory('vlc_player_hls_fixture_');
   final segment = File('${directory.path}${Platform.pathSeparator}segment.ts');
   final playlist = File(
     '${directory.path}${Platform.pathSeparator}playlist.m3u8',
@@ -74,4 +77,14 @@ Future<Uri> materializeHlsFixture({
 Future<void> _writeAsset(String assetPath, File file) async {
   final data = await rootBundle.load(assetPath);
   await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
+}
+
+Future<Directory> _createFixtureDirectory(String prefix) async {
+  final directory = await Directory.systemTemp.createTemp(prefix);
+  addTearDown(() async {
+    if (await directory.exists()) {
+      await directory.delete(recursive: true);
+    }
+  });
+  return directory;
 }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.19 - 2026-05-17
+
+### Changed
+
+- Improved integration test diagnostics and cleaned temporary format fixtures
+  after each test case.
+- Added Dart-side event pressure tests for duplicate native events and repeated
+  error payloads.
+
 ## 0.7.18 - 2026-05-17
 
 ### Changed

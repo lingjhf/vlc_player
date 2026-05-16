@@ -170,7 +170,11 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
     ),
   );
 
-  await pumpUntil(tester, () => controller.isAttached);
+  await pumpUntil(
+    tester,
+    () => controller.isAttached,
+    description: 'native player attachment for ${format.name}',
+  );
   expect(controller.isAttached, isTrue);
 
   final sourceUri = await _materializeSource(format);

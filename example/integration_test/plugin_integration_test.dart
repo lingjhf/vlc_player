@@ -70,7 +70,11 @@ void main() {
       ),
     );
 
-    await pumpUntil(tester, () => controller.isAttached);
+    await pumpUntil(
+      tester,
+      () => controller.isAttached,
+      description: 'native player attachment',
+    );
     expect(controller.isAttached, isTrue);
     expect(tester.takeException(), isNull);
 
