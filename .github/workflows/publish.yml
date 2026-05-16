@@ -66,12 +66,13 @@ jobs:
 
       - name: Run iOS integration tests
         working-directory: example
+        timeout-minutes: 25
         run: |
           set -eo pipefail
           DEVICE_ID=$(xcrun simctl list devices available -j | ruby -rjson -e 'devices = JSON.parse(STDIN.read).fetch("devices").values.flatten; device = devices.find { |item| item["name"].include?("iPhone") && item["isAvailable"] }; abort("No available iPhone simulator") unless device; puts device["udid"]')
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          flutter drive --timeout=1200 -d "$DEVICE_ID" --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+          flutter drive --no-dds --timeout=1200 -d "$DEVICE_ID" --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
       - name: Build macOS example
         working-directory: example
@@ -79,7 +80,8 @@ jobs:
 
       - name: Run macOS integration tests
         working-directory: example
-        run: flutter drive --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+        timeout-minutes: 20
+        run: flutter drive --no-dds --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
   validate-android:
     name: Validate Android release
@@ -91,7 +93,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -135,7 +137,7 @@ jobs:
           arch: x86_64
           profile: pixel_6
           working-directory: example
-          script: flutter drive --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+          script: flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
   validate-windows:
     name: Validate Windows release
@@ -179,7 +181,7 @@ jobs:
 
       - name: Run Windows integration tests
         working-directory: example
-        run: flutter drive --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+        run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
   validate-linux:
     name: Validate Linux release
@@ -230,7 +232,7 @@ jobs:
 
       - name: Run Linux integration tests
         working-directory: example
-        run: xvfb-run -a flutter drive --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+        run: xvfb-run -a flutter drive --no-dds --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
   publish:
     name: Publish

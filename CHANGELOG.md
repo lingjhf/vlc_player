@@ -8,6 +8,8 @@
 
 - Updated GitHub Actions checkout steps to the Node 24 runtime generation to
   remove CI deprecation warnings.
+- Updated Java setup and integration-test drive commands for more reliable
+  GitHub Actions runs.
 
 ## 0.7.2 - 2026-05-16
 
