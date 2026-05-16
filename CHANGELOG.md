@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.10 - 2026-05-16
+
+### Added
+
+- Added local format compatibility integration fixtures and smoke coverage for
+  MP4, HLS/M3U8, and external SRT subtitle loading.
+
 ## 0.7.9 - 2026-05-16
 
 ### Fixed

@@ -3,7 +3,7 @@ PODS:
   - integration_test (0.0.1):
     - Flutter
   - MobileVLCKit (3.7.3)
-  - vlc_player (0.7.9):
+  - vlc_player (0.7.10):
     - Flutter
     - MobileVLCKit
 
@@ -28,7 +28,7 @@ SPEC CHECKSUMS:
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   integration_test: 4a889634ef21a45d28d50d622cf412dc6d9f586e
   MobileVLCKit: 73d7ddb52238b6885b70b0f281cae75a0a6e3ac0
-  vlc_player: db6d21d5a72ff74259e4d233748204b4702570ec
+  vlc_player: 9af206092b2a16c41b204e038b6c8d7dc0855064
 
 PODFILE CHECKSUM: 3c63482e143d1b91d2d2560aee9fb04ecc74ac7e
 
