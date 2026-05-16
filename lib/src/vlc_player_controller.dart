@@ -435,12 +435,15 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   static List<VlcTrackDescription> _trackDescriptionsFrom(Object? value) {
-    if (value is! List<Object?>) {
+    if (value is! Iterable) {
       return const <VlcTrackDescription>[];
     }
     return value
-        .whereType<Map<Object?, Object?>>()
-        .map(VlcTrackDescription.fromMap)
+        .whereType<Map>()
+        .map(
+          (track) =>
+              VlcTrackDescription.fromMap(track.cast<Object?, Object?>()),
+        )
         .toList(growable: false);
   }
 

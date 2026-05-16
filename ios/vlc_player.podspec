@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'vlc_player'
-  s.version          = '0.7.4'
+  s.version          = '0.7.5'
   s.summary          = 'A Flutter plugin for video playback using VLCKit.'
   s.description      = <<-DESC
 A Flutter plugin for video playback using VideoLAN VLCKit.

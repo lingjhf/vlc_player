@@ -7,9 +7,9 @@ class VlcTrackDescription {
 
   factory VlcTrackDescription.fromMap(Map<Object?, Object?> map) {
     return VlcTrackDescription(
-      id: (map['id'] as num?)?.toInt() ?? -1,
-      name: map['name'] as String? ?? '',
-      language: map['language'] as String?,
+      id: _intValue(map['id']) ?? -1,
+      name: _stringValue(map['name']) ?? '',
+      language: _stringValue(map['language']),
     );
   }
 
@@ -42,10 +42,10 @@ class VlcMediaInfo {
 
   factory VlcMediaInfo.fromMap(Map<Object?, Object?> map) {
     return VlcMediaInfo(
-      title: map['title'] as String?,
-      artist: map['artist'] as String?,
-      album: map['album'] as String?,
-      duration: Duration(milliseconds: (map['duration'] as num?)?.toInt() ?? 0),
+      title: _stringValue(map['title']),
+      artist: _stringValue(map['artist']),
+      album: _stringValue(map['album']),
+      duration: _durationFromMilliseconds(map['duration']),
       videoTracks: _tracksFrom(map['videoTracks']),
       audioTracks: _tracksFrom(map['audioTracks']),
       subtitleTracks: _tracksFrom(map['subtitleTracks']),
@@ -61,12 +61,14 @@ class VlcMediaInfo {
   final List<VlcMediaTrackInfo> subtitleTracks;
 
   static List<VlcMediaTrackInfo> _tracksFrom(Object? value) {
-    if (value is! List<Object?>) {
+    if (value is! Iterable) {
       return const <VlcMediaTrackInfo>[];
     }
     return value
-        .whereType<Map<Object?, Object?>>()
-        .map(VlcMediaTrackInfo.fromMap)
+        .whereType<Map>()
+        .map(
+          (track) => VlcMediaTrackInfo.fromMap(track.cast<Object?, Object?>()),
+        )
         .toList(growable: false);
   }
 }
@@ -85,14 +87,14 @@ class VlcMediaTrackInfo {
 
   factory VlcMediaTrackInfo.fromMap(Map<Object?, Object?> map) {
     return VlcMediaTrackInfo(
-      type: map['type'] as String? ?? 'unknown',
-      codec: map['codec'] as String?,
-      language: map['language'] as String?,
-      bitrate: (map['bitrate'] as num?)?.toInt(),
-      width: (map['width'] as num?)?.toInt(),
-      height: (map['height'] as num?)?.toInt(),
-      channels: (map['channels'] as num?)?.toInt(),
-      sampleRate: (map['sampleRate'] as num?)?.toInt(),
+      type: _stringValue(map['type']) ?? 'unknown',
+      codec: _stringValue(map['codec']),
+      language: _stringValue(map['language']),
+      bitrate: _intValue(map['bitrate']),
+      width: _intValue(map['width']),
+      height: _intValue(map['height']),
+      channels: _intValue(map['channels']),
+      sampleRate: _intValue(map['sampleRate']),
     );
   }
 
@@ -104,4 +106,24 @@ class VlcMediaTrackInfo {
   final int? height;
   final int? channels;
   final int? sampleRate;
+}
+
+Duration _durationFromMilliseconds(Object? value) {
+  final milliseconds = _intValue(value);
+  if (milliseconds == null || milliseconds < 0) {
+    return Duration.zero;
+  }
+  return Duration(milliseconds: milliseconds);
+}
+
+String? _stringValue(Object? value) => value is String ? value : null;
+
+int? _intValue(Object? value) {
+  if (value is int) {
+    return value;
+  }
+  if (value is num && value.isFinite) {
+    return value.toInt();
+  }
+  return null;
 }

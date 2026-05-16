@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.5 - 2026-05-16
+
+### Fixed
+
+- Hardened media information and track description parsing so malformed native
+  metadata payloads are ignored instead of throwing type errors.
+
 ## 0.7.4 - 2026-05-16
 
 ### Fixed
