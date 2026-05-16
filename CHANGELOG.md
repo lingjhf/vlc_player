@@ -7,8 +7,7 @@
 ### Added
 
 - Added CI coverage for local format compatibility integration tests, with
-  smoke coverage on mobile runners, audio coverage on Linux/Xvfb, and full
-  coverage on macOS and Windows runners.
+  smoke coverage on Android and iOS and full coverage on macOS and Windows.
 
 ## 0.7.12 - 2026-05-16
 

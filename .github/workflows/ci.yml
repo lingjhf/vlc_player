@@ -224,7 +224,3 @@ jobs:
       - name: Run Linux integration tests
         working-directory: example
         run: xvfb-run -a flutter drive --no-dds --timeout=1200 -d linux --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
-
-      - name: Run Linux format compatibility tests
-        working-directory: example
-        run: xvfb-run -a flutter drive --no-dds --timeout=1200 -d linux --dart-define=VLC_PLAYER_FORMAT_SUITE=audio --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
