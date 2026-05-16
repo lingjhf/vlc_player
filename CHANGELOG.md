@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.7 - 2026-05-16
+
+### Changed
+
+- Pinned Windows CI validation to the `windows-2025-vs2026` runner image ahead
+  of the GitHub-hosted Windows runner migration.
+
 ## 0.7.6 - 2026-05-16
 
 ### Fixed

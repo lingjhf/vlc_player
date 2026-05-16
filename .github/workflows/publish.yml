@@ -143,7 +143,7 @@ jobs:
 
   validate-windows:
     name: Validate Windows release
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     timeout-minutes: 45
 
     steps:

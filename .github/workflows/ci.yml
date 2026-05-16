@@ -132,7 +132,7 @@ jobs:
   windows:
     name: Windows
     if: ${{ !startsWith(github.head_ref || github.ref_name, 'linux/') }}
-    runs-on: windows-latest
+    runs-on: windows-2025-vs2026
     timeout-minutes: 60
 
     steps:

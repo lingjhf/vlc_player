@@ -60,6 +60,18 @@ void main() {
     expect(notices, contains('MobileVLCKit'));
     expect(notices, contains('libvlcpp'));
   });
+
+  test('workflows pin the Windows runner image', () {
+    for (final path in <String>[
+      '.github/workflows/ci.yml',
+      '.github/workflows/publish.yml',
+    ]) {
+      final workflow = _fileText(path);
+
+      expect(workflow, contains('runs-on: windows-2025-vs2026'));
+      expect(workflow, isNot(contains('runs-on: windows-latest')));
+    }
+  });
 }
 
 String _pubspecVersion() {
