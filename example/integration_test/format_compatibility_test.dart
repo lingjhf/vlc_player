@@ -18,6 +18,12 @@ void main() {
       });
     }
 
+    for (final format in _videoContainerFormats) {
+      testWidgets('loads ${format.name}', (WidgetTester tester) async {
+        await _runFormatCase(tester, format);
+      });
+    }
+
     testWidgets('adds an external SRT subtitle', (WidgetTester tester) async {
       await _runFormatCase(
         tester,
@@ -42,6 +48,29 @@ const List<_FormatCase> _smokeFormats = <_FormatCase>[
     name: 'HLS M3U8',
     hlsPlaylistAssetPath: '$_assetRoot/hls/playlist.m3u8',
     hlsSegmentAssetPath: '$_assetRoot/hls/segment.ts',
+    expectsVideo: true,
+  ),
+];
+
+const List<_FormatCase> _videoContainerFormats = <_FormatCase>[
+  _FormatCase(
+    name: 'MOV',
+    assetPath: '$_assetRoot/video.mov',
+    expectsVideo: true,
+  ),
+  _FormatCase(
+    name: 'MKV',
+    assetPath: '$_assetRoot/video.mkv',
+    expectsVideo: true,
+  ),
+  _FormatCase(
+    name: 'WebM',
+    assetPath: '$_assetRoot/video.webm',
+    expectsVideo: true,
+  ),
+  _FormatCase(
+    name: 'MPEG-TS',
+    assetPath: '$_assetRoot/video.ts',
     expectsVideo: true,
   ),
 ];

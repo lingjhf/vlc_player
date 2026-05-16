@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.11 - 2026-05-16
+
+### Added
+
+- Expanded local format compatibility integration coverage to MOV, MKV, WebM,
+  and MPEG-TS video fixtures.
+
 ## 0.7.10 - 2026-05-16
 
 ### Added
