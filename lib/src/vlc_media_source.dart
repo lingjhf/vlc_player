@@ -1,7 +1,20 @@
 import 'package:flutter/foundation.dart';
 
+/// Describes one media item before it is loaded into VLC.
+///
+/// Use this instead of a bare [Uri] when the item needs request headers, VLC
+/// media options, or an initial seek position. Supported URI schemes and
+/// container/codec combinations are ultimately determined by the native VLC
+/// build used on the target platform.
 @immutable
 class VlcMediaSource {
+  /// Creates a media source for [uri].
+  ///
+  /// [uri] must be non-empty. [httpHeaders] are sent when VLC opens HTTP(S)
+  /// media. [mediaOptions] are passed to VLC for this source only; use VLC
+  /// option syntax such as `:network-caching=1200`. [startPosition] must be
+  /// non-negative and is applied after the source is loaded when the platform
+  /// backend supports seeking.
   VlcMediaSource({
     required this.uri,
     Map<String, String> httpHeaders = const <String, String>{},
@@ -21,9 +34,16 @@ class VlcMediaSource {
     }
   }
 
+  /// Media URI to load.
   final Uri uri;
+
+  /// HTTP headers used when opening [uri].
   final Map<String, String> httpHeaders;
+
+  /// VLC media options applied only to this source.
   final List<String> mediaOptions;
+
+  /// Initial playback position requested after loading this source.
   final Duration startPosition;
 
   @override

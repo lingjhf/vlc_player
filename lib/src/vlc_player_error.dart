@@ -1,22 +1,46 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+/// Stable error code strings used by [VlcPlayerError].
 abstract final class VlcPlayerErrorCode {
+  /// Invalid arguments were sent to the native player.
   static const String invalidArgs = 'invalid_args';
+
+  /// A command targeted a player instance that no longer exists.
   static const String playerNotFound = 'player_not_found';
+
+  /// Native player creation failed.
   static const String createFailed = 'create_failed';
+
+  /// Loading a media source failed.
   static const String setSourceFailed = 'set_source_failed';
+
+  /// The requested audio or subtitle track could not be found.
   static const String trackNotFound = 'track_not_found';
+
+  /// Adding an external subtitle failed.
   static const String addSubtitleFailed = 'add_subtitle_failed';
+
+  /// VLC reported a playback failure.
   static const String playbackError = 'playback_error';
+
+  /// A command was sent after the native player had been disposed.
   static const String disposed = 'disposed';
+
+  /// The native event channel reported an error.
   static const String eventChannelError = 'event_channel_error';
 }
 
+/// Structured player error information.
+///
+/// Native platform failures are converted to this type before being surfaced
+/// through [VlcPlayerException] or `VlcPlayerValue.error`.
 @immutable
 class VlcPlayerError {
+  /// Creates a player error with a stable [code].
   const VlcPlayerError({required this.code, this.message, this.details});
 
+  /// Creates a player error from a native platform map.
   factory VlcPlayerError.fromMap(Map<Object?, Object?> map) {
     return VlcPlayerError(
       code: _stringValue(map['code']) ?? VlcPlayerErrorCode.playbackError,
@@ -25,6 +49,7 @@ class VlcPlayerError {
     );
   }
 
+  /// Creates a player error from a [PlatformException].
   factory VlcPlayerError.fromPlatformException(PlatformException error) {
     return VlcPlayerError(
       code: error.code,
@@ -33,10 +58,16 @@ class VlcPlayerError {
     );
   }
 
+  /// Stable machine-readable error code.
   final String code;
+
+  /// Human-readable error message when provided by the native backend.
   final String? message;
+
+  /// Additional platform-specific error details.
   final Object? details;
 
+  /// User-facing description, falling back to [code] when [message] is absent.
   String get description => message ?? code;
 
   @override
@@ -105,19 +136,26 @@ class VlcPlayerError {
   }
 }
 
+/// Exception thrown when a native player command fails.
 class VlcPlayerException implements Exception {
+  /// Creates an exception from a structured [error].
   const VlcPlayerException(this.error);
 
+  /// Converts a [PlatformException] into a [VlcPlayerException].
   factory VlcPlayerException.fromPlatformException(PlatformException error) {
     return VlcPlayerException(VlcPlayerError.fromPlatformException(error));
   }
 
+  /// Structured player error.
   final VlcPlayerError error;
 
+  /// Stable machine-readable error code.
   String get code => error.code;
 
+  /// Human-readable error message when available.
   String? get message => error.message;
 
+  /// Additional platform-specific error details.
   Object? get details => error.details;
 
   @override

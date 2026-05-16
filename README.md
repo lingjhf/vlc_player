@@ -50,7 +50,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.13
+  vlc_player: ^0.7.14
 ```
 
 If you are using this repository directly:
@@ -209,6 +209,64 @@ await controller.setVolume(100);
 await controller.setPlaybackSpeed(1.25);
 ```
 
+### Play with headers and VLC media options
+
+Use `VlcMediaSource` when a URL needs request headers, per-item VLC options, or
+an initial seek position:
+
+```dart
+await controller.setMedia(
+  VlcMediaSource(
+    uri: Uri.parse('https://example.com/protected/video.mp4'),
+    httpHeaders: const <String, String>{
+      'Authorization': 'Bearer token',
+    },
+    mediaOptions: const <String>[
+      ':network-caching=1200',
+    ],
+    startPosition: const Duration(seconds: 30),
+  ),
+  autoPlay: true,
+);
+```
+
+### Play a playlist
+
+```dart
+await controller.setPlaylist(
+  <VlcMediaSource>[
+    VlcMediaSource(uri: Uri.parse('https://example.com/episode-1.mp4')),
+    VlcMediaSource(uri: Uri.parse('https://example.com/episode-2.mp4')),
+  ],
+  autoPlay: true,
+  autoAdvance: true,
+  loopMode: VlcPlaylistLoopMode.loopAll,
+);
+
+await controller.next();
+await controller.previous();
+```
+
+### Select tracks and subtitles
+
+```dart
+final audioTracks = await controller.getAudioTracks();
+if (audioTracks.isNotEmpty) {
+  await controller.setAudioTrack(audioTracks.first.id);
+}
+
+final subtitleTracks = await controller.getSubtitleTracks();
+if (subtitleTracks.isNotEmpty) {
+  await controller.setSubtitleTrack(subtitleTracks.first.id);
+}
+
+await controller.addSubtitle(Uri.file('/path/to/subtitles.srt'));
+await controller.disableSubtitle();
+
+final info = await controller.getMediaInfo();
+debugPrint('duration=${info.duration}, videoTracks=${info.videoTracks.length}');
+```
+
 Playback commands require the controller to be attached to a `VlcPlayer`.
 Calling commands such as `play()` before attachment throws a `StateError`.
 Native platform failures throw `VlcPlayerException`, which exposes a structured
@@ -218,6 +276,10 @@ Native platform failures throw `VlcPlayerException`, which exposes a structured
 replayed when the platform view is created.
 
 ## API
+
+This section is a quick reference for the public API. The complete generated API
+reference is published with the package at
+[pub.dev/documentation/vlc_player](https://pub.dev/documentation/vlc_player/latest/vlc_player/).
 
 ### VlcPlayer
 
@@ -298,6 +360,10 @@ Playlist state is exposed through `playlist`, `playlistIndex`,
 current media ended. `VlcPlaylistLoopMode.loopOne` repeats the current item, and
 `VlcPlaylistLoopMode.loopAll` wraps at the beginning or end of the playlist.
 
+Command failures throw `VlcPlayerException`. Commands that require a native
+player instance throw `StateError` when called before `VlcPlayer` attaches the
+controller or after the controller is disposed.
+
 ### VlcMediaSource
 
 `VlcMediaSource` describes one media item before it is passed to VLC.
@@ -318,6 +384,27 @@ await controller.setMedia(source, autoPlay: true);
 ```
 
 `uri` must be non-empty and `startPosition` must be non-negative.
+
+### Track and media information
+
+`getAudioTracks()` and `getSubtitleTracks()` return `VlcTrackDescription`
+objects:
+
+- `id`: Native VLC track id used by `setAudioTrack()` or
+  `setSubtitleTrack()`.
+- `name`: Track name reported by VLC.
+- `language`: Optional language code or label reported by VLC.
+
+`getMediaInfo()` returns `VlcMediaInfo`:
+
+- `title`, `artist`, `album`: Metadata discovered by VLC when available.
+- `duration`: Media duration, or `Duration.zero` when unknown.
+- `videoTracks`, `audioTracks`, `subtitleTracks`: Lists of
+  `VlcMediaTrackInfo`.
+
+`VlcMediaTrackInfo` includes `type`, `codec`, `language`, `bitrate`, `width`,
+`height`, `channels`, and `sampleRate`. These fields are best-effort because
+containers and streams do not always expose all values.
 
 ### VlcPlayerValue
 
@@ -359,6 +446,23 @@ Possible playback states:
 - `stopped`
 - `ended`
 - `error`
+
+### Errors
+
+Native failures are exposed as `VlcPlayerException`, which wraps a
+`VlcPlayerError`:
+
+```dart
+try {
+  await controller.play();
+} on VlcPlayerException catch (error) {
+  debugPrint('VLC command failed: ${error.code} ${error.message}');
+}
+```
+
+Common error codes are available in `VlcPlayerErrorCode`, including
+`playerNotFound`, `setSourceFailed`, `trackNotFound`, `addSubtitleFailed`,
+`playbackError`, `disposed`, and `eventChannelError`.
 
 ### Listening for state changes
 

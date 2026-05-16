@@ -4,19 +4,40 @@ import 'package:flutter/foundation.dart';
 
 import 'vlc_player_error.dart';
 
+/// Playback lifecycle states reported by the native VLC player.
 enum VlcPlaybackState {
+  /// No media is loaded.
   idle,
+
+  /// VLC is opening the current media.
   opening,
+
+  /// VLC is buffering enough data to continue playback.
   buffering,
+
+  /// Media is currently playing.
   playing,
+
+  /// Media playback is paused.
   paused,
+
+  /// Playback has been stopped.
   stopped,
+
+  /// The current media reached the end.
   ended,
+
+  /// The player is in an error state.
   error,
 }
 
+/// Immutable snapshot of the native player state.
+///
+/// Listen to `VlcPlayerController` to receive updated values as VLC emits
+/// playback events.
 @immutable
 class VlcPlayerValue {
+  /// Creates a player value snapshot.
   const VlcPlayerValue({
     this.state = VlcPlaybackState.idle,
     this.position = Duration.zero,
@@ -32,25 +53,58 @@ class VlcPlayerValue {
     this.errorDescription,
   });
 
+  /// Current playback lifecycle state.
   final VlcPlaybackState state;
+
+  /// Current playback position.
   final Duration position;
+
+  /// Current media duration, or [Duration.zero] when unknown.
   final Duration duration;
+
+  /// Current VLC volume.
+  ///
+  /// VLC volume is generally represented as `0..200`, where `100` is normal
+  /// volume.
   final int volume;
+
+  /// Current playback speed multiplier.
   final double playbackSpeed;
+
+  /// Whether the native player has reached a playable active or terminal state.
   final bool isReady;
+
+  /// Whether VLC reports that the current media can seek.
   final bool isSeekable;
+
+  /// Whether the current media looks like a live stream.
   final bool isLive;
+
+  /// Decoded video size when VLC exposes it.
   final Size? videoSize;
+
+  /// Normalized buffering progress from `0.0` to `1.0`, when available.
   final double? bufferingProgress;
+
+  /// Structured playback error when [state] is [VlcPlaybackState.error].
   final VlcPlayerError? error;
+
+  /// Human-readable playback error text when available.
   final String? errorDescription;
 
+  /// Whether [state] is [VlcPlaybackState.playing].
   bool get isPlaying => state == VlcPlaybackState.playing;
 
+  /// Whether [state] is [VlcPlaybackState.buffering].
   bool get isBuffering => state == VlcPlaybackState.buffering;
 
+  /// Whether [state] is [VlcPlaybackState.error].
   bool get hasError => state == VlcPlaybackState.error;
 
+  /// Returns a copy with selected fields replaced.
+  ///
+  /// Set [clearVideoSize], [clearBufferingProgress], or [clearError] to remove
+  /// nullable values that would otherwise be preserved from the current value.
   VlcPlayerValue copyWith({
     VlcPlaybackState? state,
     Duration? position,
@@ -100,6 +154,9 @@ class VlcPlayerValue {
     );
   }
 
+  /// Converts a native event-channel payload into a player value.
+  ///
+  /// Unknown or malformed events leave [previous] unchanged.
   static VlcPlayerValue fromEvent(Object? event, VlcPlayerValue previous) {
     if (event is! Map) {
       return previous;

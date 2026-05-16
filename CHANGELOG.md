@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.7.14 - 2026-05-17
+
+### Changed
+
+- Expanded README usage examples and public Dart API documentation.
+
 ## 0.7.13 - 2026-05-16
 
 ### Added

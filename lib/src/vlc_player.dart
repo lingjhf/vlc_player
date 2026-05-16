@@ -6,14 +6,23 @@ import 'package:flutter/services.dart';
 
 import 'vlc_player_controller.dart';
 
+/// Widget that hosts the native VLC video output.
+///
+/// The widget creates a platform view on Android, iOS, and macOS, and a
+/// texture-backed player on Windows and Linux. The owning widget should dispose
+/// the [controller] when playback is no longer needed.
 class VlcPlayer extends StatefulWidget {
+  /// Creates a VLC player widget controlled by [controller].
   const VlcPlayer({
     super.key,
     required this.controller,
     this.backgroundColor = Colors.black,
   });
 
+  /// Controller used to load media, control playback, and observe state.
   final VlcPlayerController controller;
+
+  /// Background color shown behind the native video output.
   final Color backgroundColor;
 
   @override
