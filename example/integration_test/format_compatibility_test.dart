@@ -24,6 +24,12 @@ void main() {
       });
     }
 
+    for (final format in _audioFormats) {
+      testWidgets('loads ${format.name}', (WidgetTester tester) async {
+        await _runFormatCase(tester, format);
+      });
+    }
+
     testWidgets('adds an external SRT subtitle', (WidgetTester tester) async {
       await _runFormatCase(
         tester,
@@ -72,6 +78,34 @@ const List<_FormatCase> _videoContainerFormats = <_FormatCase>[
     name: 'MPEG-TS',
     assetPath: '$_assetRoot/video.ts',
     expectsVideo: true,
+  ),
+];
+
+const List<_FormatCase> _audioFormats = <_FormatCase>[
+  _FormatCase(
+    name: 'MP3',
+    assetPath: '$_assetRoot/audio.mp3',
+    expectsAudio: true,
+  ),
+  _FormatCase(
+    name: 'AAC M4A',
+    assetPath: '$_assetRoot/audio.m4a',
+    expectsAudio: true,
+  ),
+  _FormatCase(
+    name: 'FLAC',
+    assetPath: '$_assetRoot/audio.flac',
+    expectsAudio: true,
+  ),
+  _FormatCase(
+    name: 'Ogg Vorbis',
+    assetPath: '$_assetRoot/audio.ogg',
+    expectsAudio: true,
+  ),
+  _FormatCase(
+    name: 'Opus',
+    assetPath: '$_assetRoot/audio.opus',
+    expectsAudio: true,
   ),
 ];
 

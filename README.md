@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.11
+  vlc_player: ^0.7.12
 ```
 
 If you are using this repository directly:

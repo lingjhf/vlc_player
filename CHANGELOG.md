@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.12 - 2026-05-16
+
+### Added
+
+- Expanded local format compatibility integration coverage to MP3, AAC/M4A,
+  FLAC, Ogg Vorbis, and Opus audio fixtures.
+
 ## 0.7.11 - 2026-05-16
 
 ### Added
