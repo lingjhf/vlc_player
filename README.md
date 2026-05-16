@@ -35,9 +35,10 @@ flutter drive --no-dds --timeout=1200 -d macos \
   --target=integration_test/format_compatibility_test.dart
 ```
 
-CI runs the `smoke` format suite on Android and iOS and the full suite on
-desktop runners. To run a smaller local subset, pass
-`--dart-define=VLC_PLAYER_FORMAT_SUITE=smoke`, `video`, or `audio`.
+CI runs the `smoke` format suite on Android and iOS, the `audio` suite on Linux
+under Xvfb, and the full suite on macOS and Windows. To run a smaller local
+subset, pass `--dart-define=VLC_PLAYER_FORMAT_SUITE=smoke`, `video`, or
+`audio`.
 
 ## Installation
 
