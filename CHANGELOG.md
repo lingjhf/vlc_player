@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.16 - 2026-05-17
+
+### Changed
+
+- Expanded Windows and Linux native core tests for lifecycle, validation, and
+  snapshot stability edge cases.
+
 ## 0.7.15 - 2026-05-17
 
 ### Changed
