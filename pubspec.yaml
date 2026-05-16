@@ -1,8 +1,14 @@
 name: vlc_player
 description: "A Flutter plugin for video playback using VLC."
-version: 0.6.0
+version: 0.7.0
 repository: https://github.com/lingjhf/vlc_player
 issue_tracker: https://github.com/lingjhf/vlc_player/issues
+topics:
+  - video
+  - media
+  - vlc
+  - player
+  - streaming
 
 environment:
   sdk: ^3.11.0

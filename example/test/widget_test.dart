@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player_example/main.dart';
+import 'package:vlc_player_example/src/player_example_view.dart';
 
 void main() {
   testWidgets('example app renders without a platform view', (
@@ -29,5 +30,21 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.play_arrow), findsOneWidget);
     expect(find.byIcon(Icons.stay_current_landscape), findsOneWidget);
+  });
+
+  testWidgets('example pages forward VLC player options', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      const MyApp(showPlayer: false, playerOptions: <String>['--aout=dummy']),
+    );
+
+    await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
+    await tester.pumpAndSettle();
+
+    final page = tester.widget<PlayerExampleView>(
+      find.byType(PlayerExampleView),
+    );
+    expect(page.controller.options, <String>['--aout=dummy']);
   });
 }

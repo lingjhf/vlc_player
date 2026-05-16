@@ -1,17 +1,23 @@
 # vlc_player_example
 
-Demonstrates how to use the vlc_player plugin.
+Demonstrates how to use the `vlc_player` plugin across supported Flutter
+platforms.
 
-## Getting Started
+## What it shows
 
-This project is a starting point for a Flutter application.
+- Basic MP4 playback.
+- HLS playback through a `.m3u8` playlist.
+- A full-player screen with play/pause, seek, loading state, and orientation
+  controls.
 
-A few resources to get you started if this is your first Flutter project:
+## Run
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+From this directory:
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+```sh
+flutter pub get
+flutter run
+```
+
+For desktop targets, make sure the platform setup from the root README has
+been completed before running the example.

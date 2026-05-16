@@ -9,6 +9,7 @@
 #include <string>
 #include <variant>
 
+#include "vlc_player_core.h"
 #include "vlc_player_plugin.h"
 
 namespace vlc_player {
@@ -45,6 +46,18 @@ TEST(VlcPlayerPlugin, MissingPlayerReturnsPlayerNotFound) {
 
   EXPECT_EQ(error_code, "player_not_found");
   EXPECT_NE(error_message.find("viewId 42"), std::string::npos);
+}
+
+TEST(VlcPlayerCore, SnapshotWithoutMediaIsIdle) {
+  VlcPlayerCore core({}, [] {});
+
+  ASSERT_TRUE(core.is_valid()) << core.error();
+  const VlcSnapshot snapshot = core.Snapshot();
+
+  EXPECT_EQ(snapshot.state, "idle");
+  EXPECT_EQ(snapshot.position, 0);
+  EXPECT_EQ(snapshot.duration, 0);
+  EXPECT_EQ(snapshot.volume, 100);
 }
 
 }  // namespace test

@@ -4,10 +4,16 @@ import 'package:vlc_player/vlc_player.dart';
 import 'player_example_view.dart';
 
 class VideoExamplePage extends StatefulWidget {
-  const VideoExamplePage({super.key, this.showPlayer = true, this.source});
+  const VideoExamplePage({
+    super.key,
+    this.showPlayer = true,
+    this.source,
+    this.playerOptions = const <String>[],
+  });
 
   final bool showPlayer;
   final Uri? source;
+  final List<String> playerOptions;
 
   @override
   State<VideoExamplePage> createState() => _VideoExamplePageState();
@@ -18,6 +24,7 @@ class _VideoExamplePageState extends State<VideoExamplePage> {
     source:
         widget.source ??
         Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
+    options: widget.playerOptions,
   );
 
   @override

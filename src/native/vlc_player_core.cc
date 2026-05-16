@@ -273,6 +273,16 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
     return snapshot;
   }
 
+  auto media = player_->media();
+  if (media == nullptr) {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    snapshot.state = state_override_.empty() ? "idle" : state_override_;
+    snapshot.volume = volume_;
+    snapshot.error_code = error_code_;
+    snapshot.error_description = error_description_;
+    return snapshot;
+  }
+
   const libvlc_state_t state = player_->state();
   {
     std::lock_guard<std::mutex> lock(state_mutex_);

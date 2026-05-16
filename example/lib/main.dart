@@ -14,11 +14,13 @@ class MyApp extends StatelessWidget {
     this.showPlayer = true,
     this.videoSource,
     this.hlsSource,
+    this.playerOptions = const <String>[],
   });
 
   final bool showPlayer;
   final Uri? videoSource;
   final Uri? hlsSource;
+  final List<String> playerOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -27,6 +29,7 @@ class MyApp extends StatelessWidget {
         showPlayer: showPlayer,
         videoSource: videoSource,
         hlsSource: hlsSource,
+        playerOptions: playerOptions,
       ),
     );
   }
@@ -37,11 +40,13 @@ class _ExampleListPage extends StatelessWidget {
     required this.showPlayer,
     required this.videoSource,
     required this.hlsSource,
+    required this.playerOptions,
   });
 
   final bool showPlayer;
   final Uri? videoSource;
   final Uri? hlsSource;
+  final List<String> playerOptions;
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +65,7 @@ class _ExampleListPage extends StatelessWidget {
                   builder: (_) => VideoExamplePage(
                     showPlayer: showPlayer,
                     source: videoSource,
+                    playerOptions: playerOptions,
                   ),
                 ),
               );
@@ -73,8 +79,11 @@ class _ExampleListPage extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) =>
-                      HlsExamplePage(showPlayer: showPlayer, source: hlsSource),
+                  builder: (_) => HlsExamplePage(
+                    showPlayer: showPlayer,
+                    source: hlsSource,
+                    playerOptions: playerOptions,
+                  ),
                 ),
               );
             },
@@ -87,7 +96,10 @@ class _ExampleListPage extends StatelessWidget {
             onTap: () {
               Navigator.of(context).push(
                 MaterialPageRoute<void>(
-                  builder: (_) => FullPlayerExamplePage(showPlayer: showPlayer),
+                  builder: (_) => FullPlayerExamplePage(
+                    showPlayer: showPlayer,
+                    playerOptions: playerOptions,
+                  ),
                 ),
               );
             },

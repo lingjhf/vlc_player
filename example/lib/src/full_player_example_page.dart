@@ -5,9 +5,14 @@ import 'package:flutter/services.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 class FullPlayerExamplePage extends StatefulWidget {
-  const FullPlayerExamplePage({super.key, this.showPlayer = true});
+  const FullPlayerExamplePage({
+    super.key,
+    this.showPlayer = true,
+    this.playerOptions = const <String>[],
+  });
 
   final bool showPlayer;
+  final List<String> playerOptions;
 
   @override
   State<FullPlayerExamplePage> createState() => _FullPlayerExamplePageState();
@@ -16,6 +21,7 @@ class FullPlayerExamplePage extends StatefulWidget {
 class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
   late final VlcPlayerController _controller = VlcPlayerController(
     source: Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
+    options: widget.playerOptions,
   );
 
   bool _isLandscape = false;

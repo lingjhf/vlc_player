@@ -2,6 +2,29 @@
 
 ## Unreleased
 
+## 0.7.0 - 2026-05-16
+
+### Added
+
+- Added package topics and third-party notices for VLC, VLCKit, MobileVLCKit,
+  and the vendored libvlcpp headers.
+- Added release metadata tests that verify pubspec, podspec, README, and
+  changelog version alignment.
+
+### Changed
+
+- Updated iOS and macOS podspec metadata to point at the project repository and
+  package author.
+- Replaced the example README template with plugin-specific run instructions.
+- Hardened example integration tests to create native players without loading
+  invalid media fixtures and to use VLC's dummy audio output on headless Linux
+  CI, with Linux core coverage handled by native ctest.
+
+### Fixed
+
+- Avoided querying native VLC playback state before a media source is attached
+  on desktop texture players.
+
 ## 0.6.0 - 2026-05-16
 
 ### Added

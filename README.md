@@ -26,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.6.0
+  vlc_player: ^0.7.0
 ```
 
 If you are using this repository directly:
@@ -46,6 +46,9 @@ flutter pub get
 Applications embedding this plugin must satisfy the binary distribution and
 license requirements for libVLC, MobileVLCKit, VLCKit, and the VLC Windows
 runtime.
+
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the third-party
+runtime and source components that app distributors need to account for.
 
 ## Platform setup
 

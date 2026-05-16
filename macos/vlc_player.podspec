@@ -4,14 +4,14 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'vlc_player'
-  s.version          = '0.6.0'
+  s.version          = '0.7.0'
   s.summary          = 'A macOS Flutter plugin for video playback using VLCKit.'
   s.description      = <<-DESC
 A macOS Flutter plugin for video playback using VideoLAN VLCKit.
                        DESC
-  s.homepage         = 'https://flutter.dev'
+  s.homepage         = 'https://github.com/lingjhf/vlc_player'
   s.license          = { :file => '../LICENSE' }
-  s.author           = { 'OpenCode' => 'noreply@example.com' }
+  s.author           = { 'lingjhf' => 'lingjhf@users.noreply.github.com' }
 
   s.source           = { :path => '.' }
   s.source_files = 'Classes/**/*'
