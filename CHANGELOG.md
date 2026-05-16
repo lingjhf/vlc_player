@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.7.17 - 2026-05-17
+
+### Changed
+
+- Reduced duplicated integration and native test scaffolding with shared test
+  helpers.
+- Centralized release tag/version validation used by publish CI jobs.
+
 ## 0.7.16 - 2026-05-17
 
 ### Changed

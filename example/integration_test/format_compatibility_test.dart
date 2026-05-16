@@ -1,10 +1,9 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:vlc_player/vlc_player.dart';
+
+import 'test_support.dart';
 
 const String _assetRoot = 'assets/format_fixtures';
 const String _formatSuite = String.fromEnvironment(
@@ -152,7 +151,9 @@ class _FormatCase {
 }
 
 Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
-  final controller = VlcPlayerController(options: _playerOptions(format));
+  final controller = VlcPlayerController(
+    options: headlessPlayerOptions(requiresAudio: format.expectsAudio),
+  );
   addTearDown(controller.dispose);
 
   await tester.pumpWidget(
@@ -169,7 +170,7 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
     ),
   );
 
-  await _pumpUntil(tester, () => controller.isAttached);
+  await pumpUntil(tester, () => controller.isAttached);
   expect(controller.isAttached, isTrue);
 
   final sourceUri = await _materializeSource(format);
@@ -177,7 +178,7 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
 
   final subtitleAssetPath = format.subtitleAssetPath;
   if (subtitleAssetPath != null) {
-    await controller.addSubtitle(await _materializeAsset(subtitleAssetPath));
+    await controller.addSubtitle(await materializeAsset(subtitleAssetPath));
   }
 
   final value = await _waitForUsablePlayback(tester, controller, format.name);
@@ -209,35 +210,13 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
 Future<Uri> _materializeSource(_FormatCase format) async {
   final assetPath = format.assetPath;
   if (assetPath != null) {
-    return _materializeAsset(assetPath);
+    return materializeAsset(assetPath);
   }
 
-  final directory = await Directory.systemTemp.createTemp(
-    'vlc_player_hls_fixture_',
+  return materializeHlsFixture(
+    segmentAssetPath: format.hlsSegmentAssetPath!,
+    playlistAssetPath: format.hlsPlaylistAssetPath!,
   );
-  final segment = File('${directory.path}${Platform.pathSeparator}segment.ts');
-  final playlist = File(
-    '${directory.path}${Platform.pathSeparator}playlist.m3u8',
-  );
-  await _writeAsset(format.hlsSegmentAssetPath!, segment);
-  await _writeAsset(format.hlsPlaylistAssetPath!, playlist);
-  return playlist.uri;
-}
-
-Future<Uri> _materializeAsset(String assetPath) async {
-  final directory = await Directory.systemTemp.createTemp(
-    'vlc_player_format_fixture_',
-  );
-  final file = File(
-    '${directory.path}${Platform.pathSeparator}${assetPath.split('/').last}',
-  );
-  await _writeAsset(assetPath, file);
-  return file.uri;
-}
-
-Future<void> _writeAsset(String assetPath, File file) async {
-  final data = await rootBundle.load(assetPath);
-  await file.writeAsBytes(data.buffer.asUint8List(), flush: true);
 }
 
 Future<VlcPlayerValue> _waitForUsablePlayback(
@@ -256,19 +235,6 @@ Future<VlcPlayerValue> _waitForUsablePlayback(
     }
   }
   fail('$name did not become playable. Last value: ${controller.value.state}');
-}
-
-Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
-  for (var attempt = 0; attempt < 40 && !condition(); attempt += 1) {
-    await tester.pump(const Duration(milliseconds: 250));
-  }
-}
-
-List<String> _playerOptions(_FormatCase format) {
-  if (Platform.isLinux || format.expectsAudio) {
-    return const <String>['--aout=dummy'];
-  }
-  return const <String>['--no-audio'];
 }
 
 const Set<VlcPlaybackState> _usableStates = <VlcPlaybackState>{

@@ -6,6 +6,8 @@ import 'package:integration_test/integration_test.dart';
 import 'package:vlc_player/vlc_player.dart';
 import 'package:vlc_player_example/main.dart';
 
+import 'test_support.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -23,15 +25,15 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp(showPlayer: false));
 
-    await _openExampleTile(tester, 'video-example-tile');
+    await openExampleTile(tester, 'video-example-tile');
     expect(find.text('MP4 sample video'), findsOneWidget);
 
-    await _popRoute(tester, find.text('MP4 sample video'));
-    await _openExampleTile(tester, 'hls-example-tile');
+    await popRoute(tester, find.text('MP4 sample video'));
+    await openExampleTile(tester, 'hls-example-tile');
     expect(find.text('M3U8 sample stream'), findsOneWidget);
 
-    await _popRoute(tester, find.text('M3U8 sample stream'));
-    await _openExampleTile(tester, 'full-player-example-tile');
+    await popRoute(tester, find.text('M3U8 sample stream'));
+    await openExampleTile(tester, 'full-player-example-tile');
     expect(
       find.byKey(const ValueKey<String>('full-player-play-pause-button')),
       findsOneWidget,
@@ -51,7 +53,7 @@ void main() {
       return;
     }
 
-    final controller = VlcPlayerController(options: _headlessPlayerOptions());
+    final controller = VlcPlayerController(options: headlessPlayerOptions());
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
@@ -68,12 +70,12 @@ void main() {
       ),
     );
 
-    await _pumpUntil(tester, () => controller.isAttached);
+    await pumpUntil(tester, () => controller.isAttached);
     expect(controller.isAttached, isTrue);
     expect(tester.takeException(), isNull);
 
     await tester.pumpWidget(const SizedBox.shrink());
-    await _pumpNavigation(tester);
+    await pumpNavigation(tester);
   });
 
   testWidgets('full player orientation control updates the button state', (
@@ -81,48 +83,13 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp(showPlayer: false));
 
-    await _openExampleTile(tester, 'full-player-example-tile');
+    await openExampleTile(tester, 'full-player-example-tile');
 
     await tester.tap(
       find.byKey(const ValueKey<String>('full-player-orientation-button')),
     );
-    await _pumpNavigation(tester);
+    await pumpNavigation(tester);
 
     expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);
   });
-}
-
-Future<void> _pumpNavigation(WidgetTester tester) async {
-  await tester.pump();
-  await tester.pumpAndSettle(
-    const Duration(milliseconds: 50),
-    EnginePhase.sendSemanticsUpdate,
-    const Duration(seconds: 10),
-  );
-}
-
-Future<void> _openExampleTile(WidgetTester tester, String key) async {
-  final tile = find.byKey(ValueKey<String>(key));
-  await tester.ensureVisible(tile);
-  await _pumpNavigation(tester);
-  await tester.tap(tile);
-  await _pumpNavigation(tester);
-}
-
-Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
-  for (var attempt = 0; attempt < 40 && !condition(); attempt += 1) {
-    await tester.pump(const Duration(milliseconds: 250));
-  }
-}
-
-Future<void> _popRoute(WidgetTester tester, Finder routeContent) async {
-  Navigator.of(tester.element(routeContent)).pop();
-  await _pumpNavigation(tester);
-}
-
-List<String> _headlessPlayerOptions() {
-  if (Platform.isLinux) {
-    return const <String>['--aout=dummy'];
-  }
-  return const <String>['--no-audio'];
 }
