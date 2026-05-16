@@ -4,42 +4,23 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player/vlc_player.dart';
 
+import 'vlc_method_channel_harness.dart';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  final calls = <MethodCall>[];
-  final eventChannels = <EventChannel>[];
+  late VlcMethodChannelHarness harness;
+  late List<MethodCall> calls;
+  void mockEventChannel(int viewId) => harness.mockEventChannel(viewId);
 
   setUp(() {
-    calls.clear();
-    eventChannels.clear();
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
-          call,
-        ) async {
-          calls.add(call);
-          return null;
-        });
+    harness = VlcMethodChannelHarness()..install();
+    calls = harness.calls;
   });
 
   tearDown(() {
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(VlcPlayerController.methodChannel, null);
-    for (final channel in eventChannels) {
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockStreamHandler(channel, null);
-    }
+    harness.dispose();
   });
-
-  void mockEventChannel(int viewId) {
-    final channel = EventChannel('vlc_player/events/$viewId');
-    eventChannels.add(channel);
-    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockStreamHandler(
-          channel,
-          MockStreamHandler.inline(onListen: (arguments, events) {}),
-        );
-  }
 
   group('source setup', () {
     test(
@@ -1082,11 +1063,13 @@ void main() {
       await controller.play();
       await controller.seekTo(const Duration(seconds: 3));
       await controller.setVolume(250);
+      await controller.setVolume(-25);
       await controller.setPlaybackSpeed(1.5);
 
       expect(calls.map((call) => call.method), <String>[
         'play',
         'seekTo',
+        'setVolume',
         'setVolume',
         'setPlaybackSpeed',
       ]);
@@ -1099,7 +1082,8 @@ void main() {
         'viewId': 12,
         'volume': 200,
       });
-      expect(calls[3].arguments, <String, Object?>{'viewId': 12, 'speed': 1.5});
+      expect(calls[3].arguments, <String, Object?>{'viewId': 12, 'volume': 0});
+      expect(calls[4].arguments, <String, Object?>{'viewId': 12, 'speed': 1.5});
 
       controller.dispose();
     });
@@ -1108,8 +1092,40 @@ void main() {
       final controller = VlcPlayerController();
 
       expect(controller.play, throwsStateError);
+      expect(controller.pause, throwsStateError);
+      expect(controller.stop, throwsStateError);
+      expect(controller.getAudioTracks, throwsStateError);
+      expect(controller.getSubtitleTracks, throwsStateError);
+      expect(controller.disableSubtitle, throwsStateError);
+      expect(controller.getMediaInfo, throwsStateError);
 
       controller.dispose();
+    });
+
+    test('commands after dispose fail clearly', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(17);
+      await controller.attach(17);
+
+      controller.dispose();
+
+      expect(controller.play, throwsStateError);
+      expect(
+        () => controller.setSource(Uri.parse('https://example.com/video.mp4')),
+        throwsStateError,
+      );
+      expect(
+        () => controller.setMedia(
+          VlcMediaSource(uri: Uri.parse('https://example.com/video.mp4')),
+        ),
+        throwsStateError,
+      );
+      expect(
+        () => controller.setPlaylist(<VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/video.mp4')),
+        ]),
+        throwsStateError,
+      );
     });
 
     test('negative seek positions fail before reaching native code', () async {
@@ -1141,6 +1157,8 @@ void main() {
           () => controller.setPlaybackSpeed(double.infinity),
           throwsArgumentError,
         );
+        expect(() => controller.setPlaybackSpeed(0), throwsArgumentError);
+        expect(() => controller.setPlaybackSpeed(-1), throwsArgumentError);
         expect(calls, isEmpty);
 
         controller.dispose();
@@ -1238,6 +1256,67 @@ void main() {
       expect(tracks, const <VlcTrackDescription>[
         VlcTrackDescription(id: 1, name: 'Stereo', language: 'en'),
       ]);
+
+      controller.dispose();
+    });
+
+    test('ignores malformed track payloads from native player', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(38);
+      await controller.attach(38);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            return <Object?>[
+              'bad track',
+              <Object?, Object?>{'id': double.nan, 'name': <Object?>[]},
+            ];
+          });
+
+      final tracks = await controller.getAudioTracks();
+
+      expect(calls.single.method, 'getAudioTracks');
+      expect(tracks, const <VlcTrackDescription>[
+        VlcTrackDescription(id: -1, name: ''),
+      ]);
+
+      controller.dispose();
+    });
+
+    test('track selection native errors are wrapped', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(39);
+      await controller.attach(39);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'dispose') {
+              return null;
+            }
+            throw PlatformException(
+              code: VlcPlayerErrorCode.trackNotFound,
+              message: 'Track missing',
+            );
+          });
+
+      await expectLater(
+        controller.setAudioTrack(7),
+        throwsA(
+          isA<VlcPlayerException>()
+              .having(
+                (error) => error.code,
+                'code',
+                VlcPlayerErrorCode.trackNotFound,
+              )
+              .having((error) => error.message, 'message', 'Track missing'),
+        ),
+      );
 
       controller.dispose();
     });
@@ -1380,6 +1459,27 @@ void main() {
       expect(info.audioTracks.single.channels, 2);
       expect(info.audioTracks.single.sampleRate, 48000);
       expect(info.subtitleTracks.single.language, 'zh');
+
+      controller.dispose();
+    });
+
+    test('missing media info payload returns an empty info object', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(40);
+      await controller.attach(40);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            return null;
+          });
+
+      final info = await controller.getMediaInfo();
+
+      expect(calls.single.method, 'getMediaInfo');
+      expect(info, const VlcMediaInfo());
 
       controller.dispose();
     });

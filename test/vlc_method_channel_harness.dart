@@ -1,0 +1,66 @@
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:vlc_player/vlc_player.dart';
+
+class VlcMethodChannelHarness {
+  final List<MethodCall> calls = <MethodCall>[];
+  final List<EventChannel> _eventChannels = <EventChannel>[];
+
+  void install({Future<Object?> Function(MethodCall call)? onCall}) {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          call,
+        ) async {
+          calls.add(call);
+          return onCall?.call(call);
+        });
+  }
+
+  void mockEventChannel(int viewId) {
+    final channel = EventChannel('vlc_player/events/$viewId');
+    _eventChannels.add(channel);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockStreamHandler(
+          channel,
+          MockStreamHandler.inline(onListen: (arguments, events) {}),
+        );
+  }
+
+  Future<void> sendEvent(int viewId, Map<String, Object?> event) {
+    final channel = EventChannel('vlc_player/events/$viewId');
+    return TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          channel.name,
+          channel.codec.encodeSuccessEnvelope(event),
+          null,
+        );
+  }
+
+  Future<void> sendError(
+    int viewId, {
+    required String code,
+    String? message,
+    Object? details,
+  }) {
+    final channel = EventChannel('vlc_player/events/$viewId');
+    return TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .handlePlatformMessage(
+          channel.name,
+          channel.codec.encodeErrorEnvelope(
+            code: code,
+            message: message,
+            details: details,
+          ),
+          null,
+        );
+  }
+
+  void dispose() {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(VlcPlayerController.methodChannel, null);
+    for (final channel in _eventChannels) {
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockStreamHandler(channel, null);
+    }
+  }
+}

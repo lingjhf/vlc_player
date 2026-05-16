@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.15 - 2026-05-17
+
+### Changed
+
+- Expanded Dart-side controller and value tests with shared method channel test
+  utilities and additional edge-case coverage.
+
 ## 0.7.14 - 2026-05-17
 
 ### Changed

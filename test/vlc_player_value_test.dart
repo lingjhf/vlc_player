@@ -245,5 +245,29 @@ void main() {
       expect(value.error, isNull);
       expect(value.errorDescription, isNull);
     });
+
+    test('copyWith can clear nullable optional fields', () {
+      const previous = VlcPlayerValue(
+        state: VlcPlaybackState.error,
+        videoSize: Size(640, 360),
+        bufferingProgress: 0.5,
+        error: VlcPlayerError(
+          code: VlcPlayerErrorCode.playbackError,
+          message: 'VLC failed',
+        ),
+        errorDescription: 'VLC failed',
+      );
+
+      final value = previous.copyWith(
+        clearVideoSize: true,
+        clearBufferingProgress: true,
+        clearError: true,
+      );
+
+      expect(value.videoSize, isNull);
+      expect(value.bufferingProgress, isNull);
+      expect(value.error, isNull);
+      expect(value.errorDescription, isNull);
+    });
   });
 }
