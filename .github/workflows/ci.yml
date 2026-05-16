@@ -120,8 +120,7 @@ jobs:
           xcrun simctl erase "$DEVICE_ID" || true
           xcrun simctl boot "$DEVICE_ID" || true
           xcrun simctl bootstatus "$DEVICE_ID" -b
-          flutter test -d "$DEVICE_ID" integration_test/plugin_integration_test.dart
-          flutter test -d "$DEVICE_ID" --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke integration_test/format_compatibility_test.dart
+          flutter drive --no-dds --timeout=1200 -d "$DEVICE_ID" --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
 
       - name: Build macOS example
         working-directory: example
