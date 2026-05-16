@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.21 - 2026-05-17
+
+### Added
+
+- Added opt-in controller event throttling for progress-only native updates,
+  while keeping playback state changes and errors immediate.
+- Added Dart tests for throttled event coalescing, critical-event bypass, error
+  bypass, and disposal cleanup.
+
 ## 0.7.20 - 2026-05-17
 
 ### Changed

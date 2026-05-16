@@ -38,6 +38,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     this.autoPlay = false,
     List<String> options = const <String>[],
     Map<String, String> httpHeaders = const <String, String>{},
+    this.eventThrottleInterval,
   }) : options = List<String>.unmodifiable(options),
        httpHeaders = Map<String, String>.unmodifiable(
          mediaSource?.httpHeaders ?? httpHeaders,
@@ -47,6 +48,13 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       throw ArgumentError(
         'Use either source or mediaSource, not both.',
         'mediaSource',
+      );
+    }
+    if (eventThrottleInterval case final interval? when interval.isNegative) {
+      throw ArgumentError.value(
+        eventThrottleInterval,
+        'eventThrottleInterval',
+        'Must not be negative.',
       );
     }
     _pendingMediaSource =
@@ -73,6 +81,15 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// HTTP headers used when `source` is supplied to the constructor.
   final Map<String, String> httpHeaders;
 
+  /// Optional interval used to coalesce progress-only native events.
+  ///
+  /// When set to a positive duration, updates that only change playback
+  /// position, media duration, or buffering progress are delivered at most once
+  /// per interval. State, readiness, track metadata, volume, speed, and errors
+  /// still notify listeners immediately. The default `null` keeps every
+  /// distinct native value update visible immediately.
+  final Duration? eventThrottleInterval;
+
   int? _viewId;
   int? _textureId;
   VlcMediaSource? _pendingMediaSource;
@@ -82,6 +99,8 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   bool _playlistAutoAdvance = false;
   VlcPlaylistLoopMode _playlistLoopMode = VlcPlaylistLoopMode.none;
   StreamSubscription<Object?>? _eventsSubscription;
+  Timer? _eventThrottleTimer;
+  VlcPlayerValue? _pendingThrottledValue;
   bool _isDisposed = false;
 
   /// Whether this controller is currently attached to a native player instance.
@@ -123,6 +142,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _textureId = null;
     await _eventsSubscription?.cancel();
     _eventsSubscription = null;
+    _cancelPendingThrottledValue();
     if (oldViewId != null) {
       await _disposeNativeView(oldViewId);
     }
@@ -164,6 +184,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _textureId = null;
     await _eventsSubscription?.cancel();
     _eventsSubscription = null;
+    _cancelPendingThrottledValue();
     if (oldViewId != null) {
       await _disposeNativeView(oldViewId);
     }
@@ -205,6 +226,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _textureId = null;
     await _eventsSubscription?.cancel();
     _eventsSubscription = null;
+    _cancelPendingThrottledValue();
     if (viewId != null) {
       await _disposeNativeView(viewId);
     }
@@ -560,9 +582,9 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     if (_isDisposed) {
       return;
     }
-    final previousValue = value;
+    final previousValue = _pendingThrottledValue ?? value;
     final nextValue = VlcPlayerValue.fromEvent(event, previousValue);
-    value = nextValue;
+    _setValueFromEvent(previousValue, nextValue);
     if (_playlistAutoAdvance &&
         previousValue.state != VlcPlaybackState.ended &&
         nextValue.state == VlcPlaybackState.ended) {
@@ -614,11 +636,66 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   void _setPlayerError(VlcPlayerError playerError) {
+    _cancelPendingThrottledValue();
     value = value.copyWith(
       state: VlcPlaybackState.error,
       error: playerError,
       errorDescription: playerError.message,
     );
+  }
+
+  void _setValueFromEvent(
+    VlcPlayerValue previousValue,
+    VlcPlayerValue nextValue,
+  ) {
+    if (nextValue == previousValue) {
+      return;
+    }
+    if (!_shouldThrottleEvent(previousValue, nextValue)) {
+      _setValueImmediately(nextValue);
+      return;
+    }
+    _pendingThrottledValue = nextValue;
+    _eventThrottleTimer ??= Timer(eventThrottleInterval!, _flushThrottledValue);
+  }
+
+  bool _shouldThrottleEvent(
+    VlcPlayerValue previousValue,
+    VlcPlayerValue nextValue,
+  ) {
+    final interval = eventThrottleInterval;
+    if (interval == null || interval.inMicroseconds == 0) {
+      return false;
+    }
+    return previousValue.state == nextValue.state &&
+        previousValue.volume == nextValue.volume &&
+        previousValue.playbackSpeed == nextValue.playbackSpeed &&
+        previousValue.isReady == nextValue.isReady &&
+        previousValue.isSeekable == nextValue.isSeekable &&
+        previousValue.isLive == nextValue.isLive &&
+        previousValue.videoSize == nextValue.videoSize &&
+        previousValue.error == nextValue.error &&
+        previousValue.errorDescription == nextValue.errorDescription;
+  }
+
+  void _setValueImmediately(VlcPlayerValue nextValue) {
+    _cancelPendingThrottledValue();
+    value = nextValue;
+  }
+
+  void _flushThrottledValue() {
+    final pendingValue = _pendingThrottledValue;
+    _eventThrottleTimer = null;
+    _pendingThrottledValue = null;
+    if (!_isDisposed && pendingValue != null) {
+      value = pendingValue;
+    }
+  }
+
+  void _cancelPendingThrottledValue() {
+    _eventThrottleTimer?.cancel();
+    _eventThrottleTimer = null;
+    _pendingThrottledValue = null;
   }
 
   void _ensureNotDisposed() {
@@ -639,6 +716,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _textureId = null;
     _eventsSubscription?.cancel();
     _eventsSubscription = null;
+    _cancelPendingThrottledValue();
     if (viewId != null) {
       unawaited(_disposeNativeView(viewId));
     }

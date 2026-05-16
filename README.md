@@ -50,7 +50,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.20
+  vlc_player: ^0.7.21
 ```
 
 If you are using this repository directly:
@@ -310,6 +310,7 @@ VlcPlayerController({
   bool autoPlay = false,
   List<String> options = const <String>[],
   Map<String, String> httpHeaders = const <String, String>{},
+  Duration? eventThrottleInterval,
 })
 ```
 
@@ -322,6 +323,10 @@ Constructor parameters:
 - `options`: VLC options passed to the native player when the platform view is
   created.
 - `httpHeaders`: HTTP headers used when loading the initial `source`.
+- `eventThrottleInterval`: Optional positive interval for coalescing native
+  events that only change `position`, `duration`, or `bufferingProgress`.
+  Playback state, readiness, volume, speed, video size, and errors still notify
+  immediately. Leave this as `null` to receive every distinct native event.
 
 Methods:
 
