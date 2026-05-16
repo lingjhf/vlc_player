@@ -560,11 +560,12 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     if (_isDisposed) {
       return;
     }
-    final previousState = value.state;
-    value = VlcPlayerValue.fromEvent(event, value);
+    final previousValue = value;
+    final nextValue = VlcPlayerValue.fromEvent(event, previousValue);
+    value = nextValue;
     if (_playlistAutoAdvance &&
-        previousState != VlcPlaybackState.ended &&
-        value.state == VlcPlaybackState.ended) {
+        previousValue.state != VlcPlaybackState.ended &&
+        nextValue.state == VlcPlaybackState.ended) {
       if (_playlistLoopMode == VlcPlaylistLoopMode.loopOne) {
         final current = _pendingMediaSource;
         if (current != null) {

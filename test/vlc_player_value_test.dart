@@ -22,6 +22,49 @@ void main() {
       expect(value.errorDescription, isNull);
     });
 
+    test('compares snapshots by value', () {
+      const error = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        message: 'VLC failed',
+        details: <String, Object?>{'viewId': 1},
+      );
+      const first = VlcPlayerValue(
+        state: VlcPlaybackState.playing,
+        position: Duration(seconds: 1),
+        duration: Duration(seconds: 10),
+        volume: 80,
+        playbackSpeed: 1.25,
+        isReady: true,
+        isSeekable: true,
+        isLive: false,
+        videoSize: Size(640, 360),
+        bufferingProgress: 0.5,
+        error: error,
+        errorDescription: 'VLC failed',
+      );
+      const second = VlcPlayerValue(
+        state: VlcPlaybackState.playing,
+        position: Duration(seconds: 1),
+        duration: Duration(seconds: 10),
+        volume: 80,
+        playbackSpeed: 1.25,
+        isReady: true,
+        isSeekable: true,
+        isLive: false,
+        videoSize: Size(640, 360),
+        bufferingProgress: 0.5,
+        error: error,
+        errorDescription: 'VLC failed',
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+      expect(
+        first,
+        isNot(second.copyWith(position: const Duration(seconds: 2))),
+      );
+    });
+
     test('parses readiness, seekability, live, video size, and buffering', () {
       final value = VlcPlayerValue.fromEvent(<String, Object?>{
         'state': 'buffering',

@@ -85,9 +85,10 @@ void main() {
 
     await openExampleTile(tester, 'full-player-example-tile');
 
-    await tester.tap(
+    final orientationButton = tester.widget<IconButton>(
       find.byKey(const ValueKey<String>('full-player-orientation-button')),
     );
+    orientationButton.onPressed!();
     await pumpNavigation(tester);
 
     expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);

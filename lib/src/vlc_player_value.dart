@@ -101,6 +101,42 @@ class VlcPlayerValue {
   /// Whether [state] is [VlcPlaybackState.error].
   bool get hasError => state == VlcPlaybackState.error;
 
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) {
+      return true;
+    }
+    return other is VlcPlayerValue &&
+        other.state == state &&
+        other.position == position &&
+        other.duration == duration &&
+        other.volume == volume &&
+        other.playbackSpeed == playbackSpeed &&
+        other.isReady == isReady &&
+        other.isSeekable == isSeekable &&
+        other.isLive == isLive &&
+        other.videoSize == videoSize &&
+        other.bufferingProgress == bufferingProgress &&
+        other.error == error &&
+        other.errorDescription == errorDescription;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    state,
+    position,
+    duration,
+    volume,
+    playbackSpeed,
+    isReady,
+    isSeekable,
+    isLive,
+    videoSize,
+    bufferingProgress,
+    error,
+    errorDescription,
+  );
+
   /// Returns a copy with selected fields replaced.
   ///
   /// Set [clearVideoSize], [clearBufferingProgress], or [clearError] to remove

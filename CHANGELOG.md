@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.7.18 - 2026-05-17
+
+### Changed
+
+- Added value equality to player state snapshots so duplicate native events do
+  not trigger redundant listener notifications.
+- Stabilized macOS integration coverage for the full-player orientation
+  control.
+
 ## 0.7.17 - 2026-05-17
 
 ### Changed

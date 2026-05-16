@@ -1206,6 +1206,43 @@ void main() {
   });
 
   group('event errors', () {
+    test('duplicate native events do not notify listeners', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(17);
+      await controller.attach(17);
+
+      var notifications = 0;
+      controller.addListener(() {
+        notifications += 1;
+      });
+
+      final event = <String, Object?>{
+        'state': 'playing',
+        'position': 1000,
+        'duration': 10000,
+        'volume': 100,
+        'playbackSpeed': 1.0,
+        'isReady': true,
+        'isSeekable': true,
+        'isLive': false,
+        'videoSize': <String, Object?>{'width': 640, 'height': 360},
+      };
+
+      await harness.sendEvent(17, event);
+      expect(notifications, 1);
+
+      await harness.sendEvent(17, event);
+      expect(notifications, 1);
+
+      await harness.sendEvent(17, <String, Object?>{
+        ...event,
+        'position': 1250,
+      });
+      expect(notifications, 2);
+
+      controller.dispose();
+    });
+
     test('event channel errors update the structured player error', () async {
       final controller = VlcPlayerController();
       mockEventChannel(16);
