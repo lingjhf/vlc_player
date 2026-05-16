@@ -44,11 +44,11 @@ class VlcPlayerError {
     return other is VlcPlayerError &&
         other.code == code &&
         other.message == message &&
-        other.details == details;
+        _deepEquals(other.details, details);
   }
 
   @override
-  int get hashCode => Object.hash(code, message, details);
+  int get hashCode => Object.hash(code, message, _deepHash(details));
 
   @override
   String toString() {
@@ -60,6 +60,49 @@ class VlcPlayerError {
   }
 
   static String? _stringValue(Object? value) => value is String ? value : null;
+
+  static bool _deepEquals(Object? first, Object? second) {
+    if (identical(first, second)) {
+      return true;
+    }
+    if (first is Map && second is Map) {
+      if (first.length != second.length) {
+        return false;
+      }
+      for (final key in first.keys) {
+        if (!second.containsKey(key) || !_deepEquals(first[key], second[key])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    if (first is List && second is List) {
+      if (first.length != second.length) {
+        return false;
+      }
+      for (var index = 0; index < first.length; index += 1) {
+        if (!_deepEquals(first[index], second[index])) {
+          return false;
+        }
+      }
+      return true;
+    }
+    return first == second;
+  }
+
+  static int _deepHash(Object? value) {
+    if (value is Map) {
+      return Object.hashAllUnordered(
+        value.entries.map(
+          (entry) => Object.hash(entry.key, _deepHash(entry.value)),
+        ),
+      );
+    }
+    if (value is List) {
+      return Object.hashAll(value.map(_deepHash));
+    }
+    return value.hashCode;
+  }
 }
 
 class VlcPlayerException implements Exception {

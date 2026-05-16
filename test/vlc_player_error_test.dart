@@ -43,6 +43,40 @@ void main() {
       expect(error.message, 'No player');
       expect(error.details, 7);
     });
+
+    test('compares structured details by value', () {
+      const first = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        message: 'Playback failed',
+        details: <String, Object?>{
+          'viewId': 3,
+          'source': <String>['one.mp4', 'two.mp4'],
+          'native': <String, Object?>{'code': -1},
+        },
+      );
+      const second = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        message: 'Playback failed',
+        details: <String, Object?>{
+          'native': <String, Object?>{'code': -1},
+          'source': <String>['one.mp4', 'two.mp4'],
+          'viewId': 3,
+        },
+      );
+      const changed = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        message: 'Playback failed',
+        details: <String, Object?>{
+          'viewId': 3,
+          'source': <String>['one.mp4'],
+          'native': <String, Object?>{'code': -1},
+        },
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+      expect(first, isNot(changed));
+    });
   });
 
   group('VlcPlayerException', () {

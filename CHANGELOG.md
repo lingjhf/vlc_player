@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.8 - 2026-05-16
+
+### Fixed
+
+- Compared structured `VlcPlayerError.details` payloads by value so equivalent
+  Map/List details produce equal errors and matching hash codes.
+
 ## 0.7.7 - 2026-05-16
 
 ### Changed
