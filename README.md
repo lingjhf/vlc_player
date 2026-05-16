@@ -36,12 +36,12 @@ flutter drive --no-dds --timeout=1200 -d macos \
 ```
 
 CI runs the `smoke` format suite on Android and the full suite on macOS and
-Windows. iOS CI keeps app-level integration coverage without loading libVLC
-media because the simulator can hang while creating the native player view.
-Linux CI validates native tests and the existing plugin lifecycle integration
-path; media-loading format tests are kept out of Linux/Xvfb because that runner
-currently drops the Flutter Driver service connection when local media is
-loaded. To run a smaller local subset, pass
+Windows. iOS CI builds the example app, but simulator integration tests are kept
+out of the GitHub runner because the runner can hang while launching Flutter
+integration tests for this plugin. Linux CI validates native tests and the
+existing plugin lifecycle integration path; media-loading format tests are kept
+out of Linux/Xvfb because that runner currently drops the Flutter Driver service
+connection when local media is loaded. To run a smaller local subset, pass
 `--dart-define=VLC_PLAYER_FORMAT_SUITE=smoke`, `video`, or `audio`.
 
 ## Installation

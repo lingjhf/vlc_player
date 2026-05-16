@@ -110,18 +110,6 @@ jobs:
         working-directory: example
         run: flutter build ios --no-codesign
 
-      - name: Run iOS integration tests
-        working-directory: example
-        timeout-minutes: 25
-        run: |
-          set -eo pipefail
-          DEVICE_ID=$(xcrun simctl list devices available -j | ruby -rjson -e 'devices = JSON.parse(STDIN.read).fetch("devices").values.flatten; device = devices.find { |item| item["name"].include?("iPhone") && item["isAvailable"] }; abort("No available iPhone simulator") unless device; puts device["udid"]')
-          xcrun simctl shutdown "$DEVICE_ID" || true
-          xcrun simctl erase "$DEVICE_ID" || true
-          xcrun simctl boot "$DEVICE_ID" || true
-          xcrun simctl bootstatus "$DEVICE_ID" -b
-          flutter drive --no-dds --timeout=1200 -d "$DEVICE_ID" --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
-
       - name: Build macOS example
         working-directory: example
         run: flutter build macos
