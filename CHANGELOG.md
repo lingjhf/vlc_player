@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.23 - 2026-05-17
+
+### Added
+
+- Added public API surface tests that keep removed controller compatibility
+  shortcuts and native attachment internals out of the exported Dart API.
+- Documented the package's pre-1.0 API stability policy and migration path from
+  the removed `setSource()` and constructor `source`/`httpHeaders`
+  compatibility parameters.
+
 ## 0.7.22 - 2026-05-17
 
 ### Changed

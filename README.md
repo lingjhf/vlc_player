@@ -50,7 +50,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.22
+  vlc_player: ^0.7.23
 ```
 
 If you are using this repository directly:
@@ -278,6 +278,60 @@ Native platform failures throw `VlcPlayerException`, which exposes a structured
 
 `setMedia()` can be called before attachment. The media source is replayed when
 the platform view is created.
+
+## API stability before 1.0
+
+The package is still in the `0.x` line, so the Dart API can change between
+minor releases while the plugin is being hardened for production use. Current
+work is intentionally removing compatibility shortcuts before `1.0.0` instead
+of carrying multiple ways to perform the same operation.
+
+Use the exported `package:vlc_player/vlc_player.dart` library as the supported
+application-facing API. Native view attachment, texture creation, method
+channels, and platform view type details are implementation internals and are
+not part of the supported API contract.
+
+## Migrating from 0.7.21 or earlier
+
+Version `0.7.22` removed the controller `setSource()` shortcut and the
+controller constructor's `source` and `httpHeaders` compatibility parameters.
+Use `VlcMediaSource` consistently instead.
+
+Before:
+
+```dart
+final controller = VlcPlayerController(
+  source: Uri.parse('https://example.com/video.mp4'),
+  httpHeaders: const <String, String>{
+    'Authorization': 'Bearer token',
+  },
+  autoPlay: true,
+);
+
+await controller.setSource(
+  Uri.parse('https://example.com/next.mp4'),
+  autoPlay: true,
+);
+```
+
+After:
+
+```dart
+final controller = VlcPlayerController(
+  mediaSource: VlcMediaSource(
+    uri: Uri.parse('https://example.com/video.mp4'),
+    httpHeaders: const <String, String>{
+      'Authorization': 'Bearer token',
+    },
+  ),
+  autoPlay: true,
+);
+
+await controller.setMedia(
+  VlcMediaSource(uri: Uri.parse('https://example.com/next.mp4')),
+  autoPlay: true,
+);
+```
 
 ## API
 
