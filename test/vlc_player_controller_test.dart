@@ -88,6 +88,52 @@ void main() {
       controller.dispose();
     });
 
+    test(
+      'setMedia restores previous source when native loading fails',
+      () async {
+        final controller = VlcPlayerController();
+        mockEventChannel(11);
+        await controller.attach(11);
+        var failSetSource = false;
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (failSetSource && call.method == 'setSource') {
+                throw PlatformException(
+                  code: VlcPlayerErrorCode.setSourceFailed,
+                  message: 'Could not load source.',
+                );
+              }
+              return null;
+            });
+
+        final first = VlcMediaSource(
+          uri: Uri.parse('https://example.com/first.mp4'),
+        );
+        final second = VlcMediaSource(
+          uri: Uri.parse('https://example.com/second.mp4'),
+        );
+
+        await controller.setMedia(first, autoPlay: true);
+        calls.clear();
+        failSetSource = true;
+
+        await expectLater(
+          controller.setMedia(second),
+          throwsA(isA<VlcPlayerException>()),
+        );
+
+        expect(calls.single.method, 'setSource');
+        expect(controller.currentMediaSource, first);
+        expect(controller.playlist, isEmpty);
+        expect(controller.playlistIndex, isNull);
+
+        controller.dispose();
+      },
+    );
+
     test('pending source keeps an immutable headers snapshot', () async {
       final controller = VlcPlayerController();
       final headers = <String, String>{'Authorization': 'Bearer one'};
@@ -549,6 +595,45 @@ void main() {
         controller.currentMediaSource!.uri,
         Uri.parse('https://example.com/single.mp4'),
       );
+
+      controller.dispose();
+    });
+
+    test('setSource restores playlist when native loading fails', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(52);
+      await controller.attach(52);
+      var failSetSource = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (failSetSource && call.method == 'setSource') {
+              throw PlatformException(
+                code: VlcPlayerErrorCode.setSourceFailed,
+                message: 'Could not load source.',
+              );
+            }
+            return null;
+          });
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+      await controller.setPlaylist(sources, initialIndex: 1);
+      calls.clear();
+      failSetSource = true;
+
+      await expectLater(
+        controller.setSource(Uri.parse('https://example.com/single.mp4')),
+        throwsA(isA<VlcPlayerException>()),
+      );
+
+      expect(calls.single.method, 'setSource');
+      expect(controller.playlist, sources);
+      expect(controller.playlistIndex, 1);
+      expect(controller.currentMediaSource, sources[1]);
 
       controller.dispose();
     });

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.6 - 2026-05-16
+
+### Fixed
+
+- Restored the previous source and playlist state when replacing media fails in
+  the native player.
+
 ## 0.7.5 - 2026-05-16
 
 ### Fixed

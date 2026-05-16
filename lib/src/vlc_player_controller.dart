@@ -183,8 +183,25 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false}) async {
+    _ensureNotDisposed();
+    final previousPlaylist = _playlist;
+    final previousPlaylistIndex = _playlistIndex;
+    final previousPlaylistAutoAdvance = _playlistAutoAdvance;
+    final previousPlaylistLoopMode = _playlistLoopMode;
+    final previousMediaSource = _pendingMediaSource;
+    final previousAutoPlay = _pendingAutoPlay;
     _clearPlaylist();
-    return _setMedia(source, autoPlay: autoPlay);
+    try {
+      await _setMedia(source, autoPlay: autoPlay);
+    } catch (_) {
+      _playlist = previousPlaylist;
+      _playlistIndex = previousPlaylistIndex;
+      _playlistAutoAdvance = previousPlaylistAutoAdvance;
+      _playlistLoopMode = previousPlaylistLoopMode;
+      _pendingMediaSource = previousMediaSource;
+      _pendingAutoPlay = previousAutoPlay;
+      rethrow;
+    }
   }
 
   Future<void> setPlaylist(
