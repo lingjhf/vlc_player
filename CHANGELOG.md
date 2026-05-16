@@ -10,6 +10,8 @@
   remove CI deprecation warnings.
 - Updated Java setup and integration-test drive commands for more reliable
   GitHub Actions runs.
+- Switched iOS integration CI to direct `flutter test` execution on a clean
+  simulator to avoid Flutter Driver launch hangs.
 
 ## 0.7.2 - 2026-05-16
 
