@@ -42,7 +42,7 @@ void main() {
   test('repeated native events keep listener notifications bounded', () async {
     final controller = VlcPlayerController();
     harness.mockEventChannel(41);
-    await controller.attach(41);
+    await harness.attachController(controller, 41);
 
     var notifications = 0;
     controller.addListener(() {
@@ -65,7 +65,7 @@ void main() {
   test('event channel errors notify once for equivalent payloads', () async {
     final controller = VlcPlayerController();
     harness.mockEventChannel(42);
-    await controller.attach(42);
+    await harness.attachController(controller, 42);
 
     var notifications = 0;
     controller.addListener(() {
@@ -104,7 +104,7 @@ void main() {
   test('default event delivery does not throttle progress updates', () async {
     final controller = VlcPlayerController();
     harness.mockEventChannel(43);
-    await controller.attach(43);
+    await harness.attachController(controller, 43);
 
     var notifications = 0;
     controller.addListener(() {
@@ -128,7 +128,7 @@ void main() {
       eventThrottleInterval: const Duration(milliseconds: 100),
     );
     harness.mockEventChannel(44);
-    await controller.attach(44);
+    await harness.attachController(controller, 44);
     await harness.sendEvent(44, playbackEvent(position: 0));
 
     var notifications = 0;
@@ -162,7 +162,7 @@ void main() {
       eventThrottleInterval: const Duration(milliseconds: 100),
     );
     harness.mockEventChannel(45);
-    await controller.attach(45);
+    await harness.attachController(controller, 45);
     await harness.sendEvent(45, playbackEvent(position: 0));
 
     var notifications = 0;
@@ -190,7 +190,7 @@ void main() {
       eventThrottleInterval: const Duration(milliseconds: 100),
     );
     harness.mockEventChannel(46);
-    await controller.attach(46);
+    await harness.attachController(controller, 46);
     await harness.sendEvent(46, playbackEvent(position: 0));
 
     var notifications = 0;
@@ -224,7 +224,7 @@ void main() {
       eventThrottleInterval: const Duration(milliseconds: 100),
     );
     harness.mockEventChannel(47);
-    await controller.attach(47);
+    await harness.attachController(controller, 47);
     await harness.sendEvent(47, playbackEvent(position: 0));
 
     var notifications = 0;

@@ -50,7 +50,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.7.21
+  vlc_player: ^0.7.22
 ```
 
 If you are using this repository directly:
@@ -167,7 +167,9 @@ class VideoPage extends StatefulWidget {
 
 class _VideoPageState extends State<VideoPage> {
   late final VlcPlayerController controller = VlcPlayerController(
-    source: Uri.parse('https://example.com/video.mp4'),
+    mediaSource: VlcMediaSource(
+      uri: Uri.parse('https://example.com/video.mp4'),
+    ),
     autoPlay: true,
   );
 
@@ -190,11 +192,13 @@ class _VideoPageState extends State<VideoPage> {
 ### Play an HLS stream
 
 HLS playback is handled by the native VLC library. Pass the `.m3u8` playlist URL
-as the source:
+as the media source:
 
 ```dart
 late final VlcPlayerController controller = VlcPlayerController(
-  source: Uri.parse('https://example.com/live/playlist.m3u8'),
+  mediaSource: VlcMediaSource(
+    uri: Uri.parse('https://example.com/live/playlist.m3u8'),
+  ),
   autoPlay: true,
 );
 ```
@@ -272,8 +276,8 @@ Calling commands such as `play()` before attachment throws a `StateError`.
 Native platform failures throw `VlcPlayerException`, which exposes a structured
 `VlcPlayerError` with `code`, `message`, and `details`.
 
-`setSource()` and `setMedia()` can be called before attachment. The source is
-replayed when the platform view is created.
+`setMedia()` can be called before attachment. The media source is replayed when
+the platform view is created.
 
 ## API
 
@@ -305,24 +309,20 @@ player.
 
 ```dart
 VlcPlayerController({
-  Uri? source,
   VlcMediaSource? mediaSource,
   bool autoPlay = false,
   List<String> options = const <String>[],
-  Map<String, String> httpHeaders = const <String, String>{},
   Duration? eventThrottleInterval,
 })
 ```
 
 Constructor parameters:
 
-- `source`: Optional initial media URI.
 - `mediaSource`: Optional initial `VlcMediaSource` for headers, media options,
-  and a start position. Use either `source` or `mediaSource`.
-- `autoPlay`: Starts playback automatically after `source` is set.
+  and a start position.
+- `autoPlay`: Starts playback automatically after `mediaSource` is set.
 - `options`: VLC options passed to the native player when the platform view is
   created.
-- `httpHeaders`: HTTP headers used when loading the initial `source`.
 - `eventThrottleInterval`: Optional positive interval for coalescing native
   events that only change `position`, `duration`, or `bufferingProgress`.
   Playback state, readiness, volume, speed, video size, and errors still notify
@@ -330,7 +330,6 @@ Constructor parameters:
 
 Methods:
 
-- `setSource(Uri source, {bool autoPlay = false, Map<String, String> httpHeaders = const <String, String>{}})`: Loads a new media URI.
 - `setMedia(VlcMediaSource source, {bool autoPlay = false})`: Loads a media URI
   with HTTP headers, VLC media options, and an optional start position.
 - `setPlaylist(List<VlcMediaSource> sources, {int initialIndex = 0, bool autoPlay = false, bool autoAdvance = true, VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none})`: Loads a playlist and selects the initial item.
@@ -516,7 +515,7 @@ Check:
 - Android has internet permission.
 - macOS sandboxed apps have the network client entitlement.
 - iOS ATS allows the URL if it is not HTTPS.
-- Required HTTP headers are passed through `httpHeaders`.
+- Required HTTP headers are passed through `VlcMediaSource.httpHeaders`.
 - Linux has `libvlc-dev` and `vlc` installed.
 
 ### macOS `Library not loaded: VLCKit`

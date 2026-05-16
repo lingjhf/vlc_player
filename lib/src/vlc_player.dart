@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 
 import 'vlc_player_controller.dart';
 
+const String _viewType = 'plugins.lingjhf.com/vlc_player/view';
+
 /// Widget that hosts the native VLC video output.
 ///
 /// The widget creates a platform view on Android, iOS, and macOS, and a
@@ -51,9 +53,9 @@ class _VlcPlayerState extends State<VlcPlayer> {
 
     if (_usesTexturePlayer) {
       _textureId = _attachTexturePlayer(widget.controller);
-      unawaited(oldWidget.controller.detach());
+      unawaited(_detachPlayer(oldWidget.controller));
     } else {
-      unawaited(oldWidget.controller.detach());
+      unawaited(_detachPlayer(oldWidget.controller));
     }
   }
 
@@ -61,7 +63,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
   void dispose() {
     _isDisposed = true;
     _textureGeneration++;
-    unawaited(widget.controller.detach());
+    unawaited(_detachPlayer(widget.controller));
     super.dispose();
   }
 
@@ -77,7 +79,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
         color: widget.backgroundColor,
         child: AndroidView(
           key: ValueKey<VlcPlayerController>(widget.controller),
-          viewType: VlcPlayerController.viewType,
+          viewType: _viewType,
           creationParams: <String, Object?>{
             'options': widget.controller.options,
           },
@@ -92,7 +94,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
         color: widget.backgroundColor,
         child: UiKitView(
           key: ValueKey<VlcPlayerController>(widget.controller),
-          viewType: VlcPlayerController.viewType,
+          viewType: _viewType,
           creationParams: <String, Object?>{
             'options': widget.controller.options,
           },
@@ -141,7 +143,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
       color: widget.backgroundColor,
       child: AppKitView(
         key: ValueKey<VlcPlayerController>(widget.controller),
-        viewType: VlcPlayerController.viewType,
+        viewType: _viewType,
         creationParams: <String, Object?>{'options': widget.controller.options},
         creationParamsCodec: const StandardMessageCodec(),
         onPlatformViewCreated: _handlePlatformViewCreated,
@@ -150,17 +152,29 @@ class _VlcPlayerState extends State<VlcPlayer> {
   }
 
   void _handlePlatformViewCreated(int viewId) {
-    unawaited(widget.controller.attach(viewId));
+    unawaited(_attachPlatformView(widget.controller, viewId));
   }
 
   Future<int> _attachTexturePlayer(VlcPlayerController controller) async {
     final generation = ++_textureGeneration;
-    final textureId = await controller.attachTexturePlayer();
+    final textureId = await _attachTextureBackedPlayer(controller);
     if (_isDisposed ||
         generation != _textureGeneration ||
         widget.controller != controller) {
-      await controller.detach();
+      await _detachPlayer(controller);
     }
     return textureId;
+  }
+
+  Future<void> _attachPlatformView(VlcPlayerController controller, int viewId) {
+    return (controller as dynamic).attach(viewId) as Future<void>;
+  }
+
+  Future<int> _attachTextureBackedPlayer(VlcPlayerController controller) {
+    return (controller as dynamic).attachTexturePlayer() as Future<int>;
+  }
+
+  Future<void> _detachPlayer(VlcPlayerController controller) {
+    return (controller as dynamic).detach() as Future<void>;
   }
 }

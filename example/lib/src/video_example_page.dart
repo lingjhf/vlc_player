@@ -21,9 +21,11 @@ class VideoExamplePage extends StatefulWidget {
 
 class _VideoExamplePageState extends State<VideoExamplePage> {
   late final VlcPlayerController _controller = VlcPlayerController(
-    source:
-        widget.source ??
-        Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
+    mediaSource: VlcMediaSource(
+      uri:
+          widget.source ??
+          Uri.parse('https://media.w3.org/2010/05/sintel/trailer.mp4'),
+    ),
     options: widget.playerOptions,
   );
 

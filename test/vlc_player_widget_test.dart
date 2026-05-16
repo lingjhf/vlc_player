@@ -9,11 +9,12 @@ import 'package:vlc_player/vlc_player.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  const methodChannel = MethodChannel('vlc_player');
   final eventChannels = <EventChannel>[];
 
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(VlcPlayerController.methodChannel, null);
+        .setMockMethodCallHandler(methodChannel, null);
     for (final channel in eventChannels) {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(channel, null);
@@ -47,9 +48,7 @@ void main() {
       final controller = VlcPlayerController();
       final createCompleter = Completer<Map<String, Object?>>();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
-            call,
-          ) async {
+          .setMockMethodCallHandler(methodChannel, (call) async {
             if (call.method == 'create') {
               return createCompleter.future;
             }
@@ -71,9 +70,7 @@ void main() {
     await runAsWindows(() async {
       final controller = VlcPlayerController();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
-            call,
-          ) async {
+          .setMockMethodCallHandler(methodChannel, (call) async {
             if (call.method == 'create') {
               throw PlatformException(code: 'create_failed', message: 'failed');
             }
@@ -98,9 +95,7 @@ void main() {
     await runAsWindows(() async {
       final controller = VlcPlayerController();
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
-            call,
-          ) async {
+          .setMockMethodCallHandler(methodChannel, (call) async {
             if (call.method == 'create') {
               mockEventChannel(7);
               return <String, Object?>{'viewId': 7, 'textureId': 42};

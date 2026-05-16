@@ -21,9 +21,11 @@ class HlsExamplePage extends StatefulWidget {
 
 class _HlsExamplePageState extends State<HlsExamplePage> {
   late final VlcPlayerController _controller = VlcPlayerController(
-    source:
-        widget.source ??
-        Uri.parse('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+    mediaSource: VlcMediaSource(
+      uri:
+          widget.source ??
+          Uri.parse('https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+    ),
     options: widget.playerOptions,
   );
 

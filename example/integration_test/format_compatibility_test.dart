@@ -178,7 +178,7 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
   expect(controller.isAttached, isTrue);
 
   final sourceUri = await _materializeSource(format);
-  await controller.setSource(sourceUri, autoPlay: true);
+  await controller.setMedia(VlcMediaSource(uri: sourceUri), autoPlay: true);
 
   final subtitleAssetPath = format.subtitleAssetPath;
   if (subtitleAssetPath != null) {

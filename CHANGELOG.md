@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 0.7.22 - 2026-05-17
+
+### Changed
+
+- Tightened the pre-1.0 Dart API surface by removing the `setSource()` shortcut
+  and the controller constructor's `source`/`httpHeaders` compatibility
+  parameters. Use `VlcMediaSource` with `setMedia()` or `mediaSource` instead.
+- Moved controller attachment, texture attachment, view type, and method-channel
+  details out of the statically visible app-facing controller API.
+
 ## 0.7.21 - 2026-05-17
 
 ### Added

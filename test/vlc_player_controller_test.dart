@@ -24,15 +24,17 @@ void main() {
 
   group('source setup', () {
     test(
-      'setSource before attach is replayed when the platform view is created',
+      'setMedia before attach is replayed when the platform view is created',
       () async {
         final controller = VlcPlayerController();
 
-        await controller.setSource(Uri.parse('https://example.com/video.mp4'));
+        await controller.setMedia(
+          VlcMediaSource(uri: Uri.parse('https://example.com/video.mp4')),
+        );
         expect(calls, isEmpty);
 
         mockEventChannel(7);
-        await controller.attach(7);
+        await harness.attachController(controller, 7);
 
         expect(calls, hasLength(1));
         expect(calls.single.method, 'setSource');
@@ -50,10 +52,12 @@ void main() {
     test('HLS source uri is passed through to the native VLC player', () async {
       final controller = VlcPlayerController();
       mockEventChannel(9);
-      await controller.attach(9);
+      await harness.attachController(controller, 9);
 
-      await controller.setSource(
-        Uri.parse('https://example.com/live/playlist.m3u8'),
+      await controller.setMedia(
+        VlcMediaSource(
+          uri: Uri.parse('https://example.com/live/playlist.m3u8'),
+        ),
         autoPlay: true,
       );
 
@@ -74,10 +78,10 @@ void main() {
       () async {
         final controller = VlcPlayerController();
         mockEventChannel(11);
-        await controller.attach(11);
+        await harness.attachController(controller, 11);
         var failSetSource = false;
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
               call,
             ) async {
               calls.add(call);
@@ -115,18 +119,20 @@ void main() {
       },
     );
 
-    test('pending source keeps an immutable headers snapshot', () async {
+    test('pending media source keeps an immutable headers snapshot', () async {
       final controller = VlcPlayerController();
       final headers = <String, String>{'Authorization': 'Bearer one'};
 
-      await controller.setSource(
-        Uri.parse('https://example.com/video.mp4'),
-        httpHeaders: headers,
+      await controller.setMedia(
+        VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+          httpHeaders: headers,
+        ),
       );
       headers['Authorization'] = 'Bearer two';
 
       mockEventChannel(10);
-      await controller.attach(10);
+      await harness.attachController(controller, 10);
 
       expect(calls.single.method, 'setSource');
       expect(calls.single.arguments, <String, Object?>{
@@ -154,7 +160,7 @@ void main() {
       expect(calls, isEmpty);
 
       mockEventChannel(8);
-      await controller.attach(8);
+      await harness.attachController(controller, 8);
 
       expect(calls.single.method, 'setSource');
       expect(calls.single.arguments, <String, Object?>{
@@ -183,11 +189,8 @@ void main() {
         );
 
         mockEventChannel(6);
-        await controller.attach(6);
+        await harness.attachController(controller, 6);
 
-        expect(controller.httpHeaders, <String, String>{
-          'Authorization': 'Bearer one',
-        });
         expect(calls.single.method, 'setSource');
         expect(calls.single.arguments, <String, Object?>{
           'viewId': 6,
@@ -202,32 +205,21 @@ void main() {
       },
     );
 
-    test('constructor rejects empty source uri', () {
-      expect(() => VlcPlayerController(source: Uri()), throwsArgumentError);
+    test('media source rejects empty uri before reaching native code', () {
+      expect(() => VlcMediaSource(uri: Uri()), throwsArgumentError);
       expect(calls, isEmpty);
     });
 
-    test('constructor rejects source and mediaSource together', () {
-      expect(
-        () => VlcPlayerController(
-          source: Uri.parse('https://example.com/video.mp4'),
-          mediaSource: VlcMediaSource(
-            uri: Uri.parse('https://example.com/other.mp4'),
-          ),
-        ),
-        throwsA(isA<ArgumentError>()),
-      );
-      expect(calls, isEmpty);
-    });
-
-    test('constructor keeps immutable options and headers snapshots', () async {
+    test('constructor keeps immutable options and media snapshots', () async {
       final options = <String>['--network-caching=1000'];
       final headers = <String, String>{'Authorization': 'Bearer one'};
       final controller = VlcPlayerController(
-        source: Uri.parse('https://example.com/video.mp4'),
+        mediaSource: VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+          httpHeaders: headers,
+        ),
         autoPlay: true,
         options: options,
-        httpHeaders: headers,
       );
 
       options.add('--file-caching=1000');
@@ -237,13 +229,9 @@ void main() {
         () => controller.options.add('--no-video-title-show'),
         throwsA(isA<UnsupportedError>()),
       );
-      expect(
-        () => controller.httpHeaders['X-Test'] = 'value',
-        throwsA(isA<UnsupportedError>()),
-      );
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -254,7 +242,7 @@ void main() {
             return null;
           });
 
-      await controller.attachTexturePlayer();
+      await harness.attachTexturePlayer(controller);
 
       expect(calls.map((call) => call.method), <String>['create', 'setSource']);
       expect(calls[0].arguments, <String, Object?>{
@@ -270,27 +258,18 @@ void main() {
       controller.dispose();
     });
 
-    test('empty source uri fails before reaching native code', () async {
-      final controller = VlcPlayerController();
-
-      expect(() => controller.setSource(Uri()), throwsArgumentError);
-      expect(calls, isEmpty);
-
-      controller.dispose();
-    });
-
     test(
       'attach disposes the new platform view if disposed while replacing old view',
       () async {
         final controller = VlcPlayerController();
         mockEventChannel(41);
-        await controller.attach(41);
+        await harness.attachController(controller, 41);
 
         final oldDisposeStarted = Completer<void>();
         final oldDisposeCompleter = Completer<void>();
         calls.clear();
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
               call,
             ) async {
               calls.add(call);
@@ -302,7 +281,7 @@ void main() {
               return null;
             });
 
-        final attach = controller.attach(42);
+        final attach = harness.attachController(controller, 42);
         await oldDisposeStarted.future;
         controller.dispose();
         oldDisposeCompleter.complete();
@@ -339,7 +318,7 @@ void main() {
       expect(controller.hasPrevious, isTrue);
 
       mockEventChannel(51);
-      await controller.attach(51);
+      await harness.attachController(controller, 51);
 
       expect(calls.single.method, 'setSource');
       expect(calls.single.arguments, <String, Object?>{
@@ -372,7 +351,7 @@ void main() {
         expect(calls, isEmpty);
 
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
               call,
             ) async {
               calls.add(call);
@@ -383,7 +362,7 @@ void main() {
               return null;
             });
 
-        await controller.attachTexturePlayer();
+        await harness.attachTexturePlayer(controller);
 
         expect(calls.map((call) => call.method), <String>[
           'create',
@@ -439,7 +418,7 @@ void main() {
       ];
 
       mockEventChannel(52);
-      await controller.attach(52);
+      await harness.attachController(controller, 52);
       await controller.setPlaylist(sources);
       calls.clear();
 
@@ -482,12 +461,12 @@ void main() {
       ];
 
       mockEventChannel(55);
-      await controller.attach(55);
+      await harness.attachController(controller, 55);
       await controller.setPlaylist(sources);
       calls.clear();
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -519,12 +498,12 @@ void main() {
         ];
 
         mockEventChannel(56);
-        await controller.attach(56);
+        await harness.attachController(controller, 56);
         await controller.setPlaylist(first);
         calls.clear();
 
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
               call,
             ) async {
               calls.add(call);
@@ -558,7 +537,7 @@ void main() {
       controller.dispose();
     });
 
-    test('setSource clears playlist state', () async {
+    test('setMedia clears playlist state', () async {
       final controller = VlcPlayerController();
       final sources = <VlcMediaSource>[
         VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
@@ -566,27 +545,27 @@ void main() {
       ];
 
       await controller.setPlaylist(sources);
-      await controller.setSource(Uri.parse('https://example.com/single.mp4'));
+      final single = VlcMediaSource(
+        uri: Uri.parse('https://example.com/single.mp4'),
+      );
+      await controller.setMedia(single);
 
       expect(controller.playlist, isEmpty);
       expect(controller.playlistIndex, isNull);
       expect(controller.hasNext, isFalse);
       expect(controller.hasPrevious, isFalse);
-      expect(
-        controller.currentMediaSource!.uri,
-        Uri.parse('https://example.com/single.mp4'),
-      );
+      expect(controller.currentMediaSource, single);
 
       controller.dispose();
     });
 
-    test('setSource restores playlist when native loading fails', () async {
+    test('setMedia restores playlist when native loading fails', () async {
       final controller = VlcPlayerController();
       mockEventChannel(52);
-      await controller.attach(52);
+      await harness.attachController(controller, 52);
       var failSetSource = false;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -607,7 +586,9 @@ void main() {
       failSetSource = true;
 
       await expectLater(
-        controller.setSource(Uri.parse('https://example.com/single.mp4')),
+        controller.setMedia(
+          VlcMediaSource(uri: Uri.parse('https://example.com/single.mp4')),
+        ),
         throwsA(isA<VlcPlayerException>()),
       );
 
@@ -627,7 +608,7 @@ void main() {
       ];
 
       mockEventChannel(53);
-      await controller.attach(53);
+      await harness.attachController(controller, 53);
       await controller.setPlaylist(sources, autoAdvance: true);
       calls.clear();
 
@@ -671,7 +652,7 @@ void main() {
     test('auto advance reports native loading failures', () async {
       var failSetSource = false;
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -691,7 +672,7 @@ void main() {
       ];
 
       mockEventChannel(60);
-      await controller.attach(60);
+      await harness.attachController(controller, 60);
       await controller.setPlaylist(sources, autoAdvance: true);
       calls.clear();
       failSetSource = true;
@@ -726,7 +707,7 @@ void main() {
       ];
 
       mockEventChannel(54);
-      await controller.attach(54);
+      await harness.attachController(controller, 54);
       await controller.setPlaylist(sources, autoAdvance: false);
       calls.clear();
 
@@ -755,7 +736,7 @@ void main() {
       ];
 
       mockEventChannel(57);
-      await controller.attach(57);
+      await harness.attachController(controller, 57);
       await controller.setPlaylist(
         sources,
         initialIndex: 1,
@@ -793,7 +774,7 @@ void main() {
       ];
 
       mockEventChannel(58);
-      await controller.attach(58);
+      await harness.attachController(controller, 58);
       await controller.setPlaylist(
         sources,
         initialIndex: 1,
@@ -830,7 +811,7 @@ void main() {
       ];
 
       mockEventChannel(59);
-      await controller.attach(59);
+      await harness.attachController(controller, 59);
       await controller.setPlaylist(
         sources,
         loopMode: VlcPlaylistLoopMode.loopOne,
@@ -863,12 +844,14 @@ void main() {
   group('platform view lifecycle', () {
     test('attachTexturePlayer creates a texture backed player', () async {
       final controller = VlcPlayerController(
-        source: Uri.parse('https://example.com/video.mp4'),
+        mediaSource: VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+        ),
         autoPlay: true,
       );
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -879,7 +862,7 @@ void main() {
             return null;
           });
 
-      final textureId = await controller.attachTexturePlayer();
+      final textureId = await harness.attachTexturePlayer(controller);
 
       expect(textureId, 99);
       expect(calls.map((call) => call.method), <String>['create', 'setSource']);
@@ -898,7 +881,7 @@ void main() {
       final controller = VlcPlayerController();
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -906,8 +889,8 @@ void main() {
             return <String, Object?>{'viewId': 22, 'textureId': 100};
           });
 
-      final firstTextureId = await controller.attachTexturePlayer();
-      final secondTextureId = await controller.attachTexturePlayer();
+      final firstTextureId = await harness.attachTexturePlayer(controller);
+      final secondTextureId = await harness.attachTexturePlayer(controller);
 
       expect(firstTextureId, 100);
       expect(secondTextureId, 100);
@@ -924,7 +907,7 @@ void main() {
         final createCompleter = Completer<void>();
 
         TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-            .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
               call,
             ) async {
               calls.add(call);
@@ -936,7 +919,7 @@ void main() {
               return null;
             });
 
-        final attach = controller.attachTexturePlayer();
+        final attach = harness.attachTexturePlayer(controller);
         await createStarted.future;
         controller.dispose();
         createCompleter.complete();
@@ -951,7 +934,7 @@ void main() {
       final controller = VlcPlayerController();
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -962,8 +945,8 @@ void main() {
             return null;
           });
 
-      await controller.attachTexturePlayer();
-      await controller.detach();
+      await harness.attachTexturePlayer(controller);
+      await harness.detachController(controller);
 
       expect(calls.map((call) => call.method), <String>['create', 'dispose']);
       expect(calls[1].arguments, <String, Object?>{'viewId': 23});
@@ -973,12 +956,14 @@ void main() {
 
     test('attach with the same view id does not replay source', () async {
       final controller = VlcPlayerController(
-        source: Uri.parse('https://example.com/video.mp4'),
+        mediaSource: VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+        ),
       );
 
       mockEventChannel(3);
-      await controller.attach(3);
-      await controller.attach(3);
+      await harness.attachController(controller, 3);
+      await harness.attachController(controller, 3);
 
       expect(calls.map((call) => call.method), <String>['setSource']);
 
@@ -987,15 +972,17 @@ void main() {
 
     test('attach to a new view id disposes the previous native view', () async {
       final controller = VlcPlayerController(
-        source: Uri.parse('https://example.com/video.mp4'),
+        mediaSource: VlcMediaSource(
+          uri: Uri.parse('https://example.com/video.mp4'),
+        ),
       );
 
       mockEventChannel(1);
       mockEventChannel(2);
-      await controller.attach(1);
+      await harness.attachController(controller, 1);
 
       calls.clear();
-      await controller.attach(2);
+      await harness.attachController(controller, 2);
 
       expect(calls.map((call) => call.method), <String>[
         'dispose',
@@ -1015,7 +1002,7 @@ void main() {
     test('dispose releases the current native view once', () async {
       final controller = VlcPlayerController();
       mockEventChannel(4);
-      await controller.attach(4);
+      await harness.attachController(controller, 4);
 
       calls.clear();
       controller.dispose();
@@ -1029,7 +1016,7 @@ void main() {
     test('events arriving after dispose are ignored', () async {
       final controller = VlcPlayerController();
       mockEventChannel(5);
-      await controller.attach(5);
+      await harness.attachController(controller, 5);
 
       final channel = EventChannel('vlc_player/events/5');
       await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1058,7 +1045,7 @@ void main() {
     test('commands include the attached view id', () async {
       final controller = VlcPlayerController();
       mockEventChannel(12);
-      await controller.attach(12);
+      await harness.attachController(controller, 12);
 
       await controller.play();
       await controller.seekTo(const Duration(seconds: 3));
@@ -1105,13 +1092,15 @@ void main() {
     test('commands after dispose fail clearly', () async {
       final controller = VlcPlayerController();
       mockEventChannel(17);
-      await controller.attach(17);
+      await harness.attachController(controller, 17);
 
       controller.dispose();
 
       expect(controller.play, throwsStateError);
       expect(
-        () => controller.setSource(Uri.parse('https://example.com/video.mp4')),
+        () => controller.setMedia(
+          VlcMediaSource(uri: Uri.parse('https://example.com/video.mp4')),
+        ),
         throwsStateError,
       );
       expect(
@@ -1131,7 +1120,7 @@ void main() {
     test('negative seek positions fail before reaching native code', () async {
       final controller = VlcPlayerController();
       mockEventChannel(13);
-      await controller.attach(13);
+      await harness.attachController(controller, 13);
 
       expect(
         () => controller.seekTo(const Duration(milliseconds: -1)),
@@ -1147,7 +1136,7 @@ void main() {
       () async {
         final controller = VlcPlayerController();
         mockEventChannel(14);
-        await controller.attach(14);
+        await harness.attachController(controller, 14);
 
         expect(
           () => controller.setPlaybackSpeed(double.nan),
@@ -1168,10 +1157,10 @@ void main() {
     test('native command errors are wrapped as VlcPlayerException', () async {
       final controller = VlcPlayerController();
       mockEventChannel(15);
-      await controller.attach(15);
+      await harness.attachController(controller, 15);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1209,7 +1198,7 @@ void main() {
     test('duplicate native events do not notify listeners', () async {
       final controller = VlcPlayerController();
       mockEventChannel(17);
-      await controller.attach(17);
+      await harness.attachController(controller, 17);
 
       var notifications = 0;
       controller.addListener(() {
@@ -1246,7 +1235,7 @@ void main() {
     test('event channel errors update the structured player error', () async {
       final controller = VlcPlayerController();
       mockEventChannel(16);
-      await controller.attach(16);
+      await harness.attachController(controller, 16);
 
       final channel = EventChannel('vlc_player/events/16');
       await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -1274,10 +1263,10 @@ void main() {
     test('gets audio tracks from native player', () async {
       final controller = VlcPlayerController();
       mockEventChannel(31);
-      await controller.attach(31);
+      await harness.attachController(controller, 31);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1300,10 +1289,10 @@ void main() {
     test('ignores malformed track payloads from native player', () async {
       final controller = VlcPlayerController();
       mockEventChannel(38);
-      await controller.attach(38);
+      await harness.attachController(controller, 38);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1326,10 +1315,10 @@ void main() {
     test('track selection native errors are wrapped', () async {
       final controller = VlcPlayerController();
       mockEventChannel(39);
-      await controller.attach(39);
+      await harness.attachController(controller, 39);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1361,7 +1350,7 @@ void main() {
     test('subtitle commands include selected id and uri', () async {
       final controller = VlcPlayerController();
       mockEventChannel(32);
-      await controller.attach(32);
+      await harness.attachController(controller, 32);
 
       await controller.setAudioTrack(2);
       await controller.setSubtitleTrack(4);
@@ -1388,7 +1377,7 @@ void main() {
     test('audio track selection rejects negative ids', () async {
       final controller = VlcPlayerController();
       mockEventChannel(33);
-      await controller.attach(33);
+      await harness.attachController(controller, 33);
 
       expect(() => controller.setAudioTrack(-1), throwsArgumentError);
       expect(calls, isEmpty);
@@ -1399,7 +1388,7 @@ void main() {
     test('subtitle track selection rejects negative ids', () async {
       final controller = VlcPlayerController();
       mockEventChannel(36);
-      await controller.attach(36);
+      await harness.attachController(controller, 36);
 
       expect(() => controller.setSubtitleTrack(-1), throwsArgumentError);
       expect(calls, isEmpty);
@@ -1410,7 +1399,7 @@ void main() {
     test('empty subtitle uri fails before reaching native code', () async {
       final controller = VlcPlayerController();
       mockEventChannel(37);
-      await controller.attach(37);
+      await harness.attachController(controller, 37);
 
       expect(() => controller.addSubtitle(Uri()), throwsArgumentError);
       expect(calls, isEmpty);
@@ -1421,10 +1410,10 @@ void main() {
     test('gets subtitle tracks from native player', () async {
       final controller = VlcPlayerController();
       mockEventChannel(35);
-      await controller.attach(35);
+      await harness.attachController(controller, 35);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1446,10 +1435,10 @@ void main() {
     test('gets media info from native player', () async {
       final controller = VlcPlayerController();
       mockEventChannel(34);
-      await controller.attach(34);
+      await harness.attachController(controller, 34);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);
@@ -1503,10 +1492,10 @@ void main() {
     test('missing media info payload returns an empty info object', () async {
       final controller = VlcPlayerController();
       mockEventChannel(40);
-      await controller.attach(40);
+      await harness.attachController(controller, 40);
 
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
             call,
           ) async {
             calls.add(call);

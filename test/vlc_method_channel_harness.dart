@@ -3,17 +3,29 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 class VlcMethodChannelHarness {
+  static const MethodChannel methodChannel = MethodChannel('vlc_player');
+
   final List<MethodCall> calls = <MethodCall>[];
   final List<EventChannel> _eventChannels = <EventChannel>[];
 
   void install({Future<Object?> Function(MethodCall call)? onCall}) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
-          call,
-        ) async {
+        .setMockMethodCallHandler(methodChannel, (call) async {
           calls.add(call);
           return onCall?.call(call);
         });
+  }
+
+  Future<void> attachController(VlcPlayerController controller, int viewId) {
+    return (controller as dynamic).attach(viewId) as Future<void>;
+  }
+
+  Future<int> attachTexturePlayer(VlcPlayerController controller) {
+    return (controller as dynamic).attachTexturePlayer() as Future<int>;
+  }
+
+  Future<void> detachController(VlcPlayerController controller) {
+    return (controller as dynamic).detach() as Future<void>;
   }
 
   void mockEventChannel(int viewId) {
@@ -66,7 +78,7 @@ class VlcMethodChannelHarness {
 
   void dispose() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
-        .setMockMethodCallHandler(VlcPlayerController.methodChannel, null);
+        .setMockMethodCallHandler(methodChannel, null);
     for (final channel in _eventChannels) {
       TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .setMockStreamHandler(channel, null);

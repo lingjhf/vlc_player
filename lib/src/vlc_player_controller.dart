@@ -23,63 +23,36 @@ enum VlcPlaylistLoopMode {
 /// Controls a `VlcPlayer` and exposes playback state.
 ///
 /// A controller can be configured before it is attached to a widget. Calls to
-/// [setSource], [setMedia], or [setPlaylist] are remembered and applied when the
-/// native player is created. Playback commands such as [play] and [pause]
-/// require the controller to be attached to a `VlcPlayer`.
-class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
+/// [setMedia] or [setPlaylist] are remembered and applied when the native
+/// player is created. Playback commands such as [play] and [pause] require the
+/// controller to be attached to a `VlcPlayer`.
+abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// Creates a controller.
   ///
-  /// Use [source] for a simple initial URI, or [mediaSource] when the initial
-  /// item needs headers, media options, or a start position. Passing both
-  /// [source] and [mediaSource] throws an [ArgumentError].
-  VlcPlayerController({
-    Uri? source,
+  /// Use [mediaSource] when an initial media item should be applied when the
+  /// native player is created.
+  factory VlcPlayerController({
     VlcMediaSource? mediaSource,
-    this.autoPlay = false,
+    bool autoPlay = false,
     List<String> options = const <String>[],
-    Map<String, String> httpHeaders = const <String, String>{},
-    this.eventThrottleInterval,
-  }) : options = List<String>.unmodifiable(options),
-       httpHeaders = Map<String, String>.unmodifiable(
-         mediaSource?.httpHeaders ?? httpHeaders,
-       ),
-       super(const VlcPlayerValue()) {
-    if (source != null && mediaSource != null) {
-      throw ArgumentError(
-        'Use either source or mediaSource, not both.',
-        'mediaSource',
-      );
-    }
-    if (eventThrottleInterval case final interval? when interval.isNegative) {
-      throw ArgumentError.value(
-        eventThrottleInterval,
-        'eventThrottleInterval',
-        'Must not be negative.',
-      );
-    }
-    _pendingMediaSource =
-        mediaSource ??
-        (source == null
-            ? null
-            : VlcMediaSource(uri: source, httpHeaders: httpHeaders));
-    _pendingAutoPlay = autoPlay;
+    Duration? eventThrottleInterval,
+  }) {
+    return _VlcPlayerController(
+      mediaSource: mediaSource,
+      autoPlay: autoPlay,
+      options: options,
+      eventThrottleInterval: eventThrottleInterval,
+    );
   }
 
-  /// Native platform view type used by the plugin.
-  static const String viewType = 'plugins.lingjhf.com/vlc_player/view';
+  VlcPlayerController._() : super(const VlcPlayerValue());
 
-  /// Shared method channel used by tests and native command dispatch.
-  @visibleForTesting
-  static const MethodChannel methodChannel = MethodChannel('vlc_player');
-
-  /// Whether the initially configured source should start playback immediately.
-  final bool autoPlay;
+  /// Whether the initially configured media source should start playback
+  /// immediately.
+  bool get autoPlay;
 
   /// VLC instance options applied when the native player is created.
-  final List<String> options;
-
-  /// HTTP headers used when `source` is supplied to the constructor.
-  final Map<String, String> httpHeaders;
+  List<String> get options;
 
   /// Optional interval used to coalesce progress-only native events.
   ///
@@ -88,6 +61,140 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// per interval. State, readiness, track metadata, volume, speed, and errors
   /// still notify listeners immediately. The default `null` keeps every
   /// distinct native value update visible immediately.
+  Duration? get eventThrottleInterval;
+
+  /// Whether this controller is currently attached to a native player instance.
+  bool get isAttached;
+
+  /// Current playlist items, or an empty list when no playlist is active.
+  List<VlcMediaSource> get playlist;
+
+  /// Current playlist index, or `null` when no playlist is active.
+  int? get playlistIndex;
+
+  /// Current playlist loop mode.
+  VlcPlaylistLoopMode get playlistLoopMode;
+
+  /// Current media source, including a pending source set before attachment.
+  VlcMediaSource? get currentMediaSource;
+
+  /// Whether [next] can move to another item without wrapping.
+  bool get hasNext;
+
+  /// Whether [previous] can move to another item without wrapping.
+  bool get hasPrevious;
+
+  /// Loads a [VlcMediaSource].
+  ///
+  /// Use this when the item needs HTTP headers, VLC media options, or an
+  /// initial seek position. This clears any active playlist.
+  Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false});
+
+  /// Loads a playlist and selects [initialIndex].
+  ///
+  /// [sources] must be non-empty. When [autoAdvance] is true, the controller
+  /// advances after VLC reports that the current item ended. [loopMode] controls
+  /// repeat and wrap behavior.
+  Future<void> setPlaylist(
+    List<VlcMediaSource> sources, {
+    int initialIndex = 0,
+    bool autoPlay = false,
+    bool autoAdvance = true,
+    VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none,
+  });
+
+  /// Moves to the next playlist item.
+  ///
+  /// Returns `false` when there is no next item and [playlistLoopMode] is
+  /// [VlcPlaylistLoopMode.none]. Throws [StateError] when no playlist is active.
+  Future<bool> next({bool autoPlay = true});
+
+  /// Moves to the previous playlist item.
+  ///
+  /// Returns `false` when there is no previous item and [playlistLoopMode] is
+  /// [VlcPlaylistLoopMode.none]. Throws [StateError] when no playlist is active.
+  Future<bool> previous({bool autoPlay = true});
+
+  /// Starts or resumes playback.
+  Future<void> play();
+
+  /// Pauses playback.
+  Future<void> pause();
+
+  /// Stops playback.
+  Future<void> stop();
+
+  /// Seeks to [position].
+  ///
+  /// [position] must be non-negative.
+  Future<void> seekTo(Duration position);
+
+  /// Sets VLC volume.
+  ///
+  /// Values are clamped to VLC's `0..200` range.
+  Future<void> setVolume(int volume);
+
+  /// Sets playback speed.
+  ///
+  /// [speed] must be finite and greater than zero. `1.0` is normal speed.
+  Future<void> setPlaybackSpeed(double speed);
+
+  /// Returns selectable audio tracks for the current media.
+  Future<List<VlcTrackDescription>> getAudioTracks();
+
+  /// Selects an audio track by VLC track [id].
+  ///
+  /// Use an id returned by [getAudioTracks].
+  Future<void> setAudioTrack(int id);
+
+  /// Returns selectable embedded subtitle tracks for the current media.
+  Future<List<VlcTrackDescription>> getSubtitleTracks();
+
+  /// Selects an embedded subtitle track by VLC track [id].
+  ///
+  /// Use an id returned by [getSubtitleTracks].
+  Future<void> setSubtitleTrack(int id);
+
+  /// Disables subtitle rendering for the current media.
+  Future<void> disableSubtitle();
+
+  /// Adds and selects an external subtitle from [uri].
+  ///
+  /// [uri] can point to a local file or a remote subtitle URL supported by VLC.
+  Future<void> addSubtitle(Uri uri);
+
+  /// Returns metadata and discovered track details for the current media.
+  Future<VlcMediaInfo> getMediaInfo();
+}
+
+const MethodChannel _methodChannel = MethodChannel('vlc_player');
+
+class _VlcPlayerController extends VlcPlayerController {
+  _VlcPlayerController({
+    VlcMediaSource? mediaSource,
+    this.autoPlay = false,
+    List<String> options = const <String>[],
+    this.eventThrottleInterval,
+  }) : options = List<String>.unmodifiable(options),
+       super._() {
+    if (eventThrottleInterval case final interval? when interval.isNegative) {
+      throw ArgumentError.value(
+        eventThrottleInterval,
+        'eventThrottleInterval',
+        'Must not be negative.',
+      );
+    }
+    _pendingMediaSource = mediaSource;
+    _pendingAutoPlay = autoPlay;
+  }
+
+  @override
+  final bool autoPlay;
+
+  @override
+  final List<String> options;
+
+  @override
   final Duration? eventThrottleInterval;
 
   int? _viewId;
@@ -103,28 +210,28 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   VlcPlayerValue? _pendingThrottledValue;
   bool _isDisposed = false;
 
-  /// Whether this controller is currently attached to a native player instance.
+  @override
   bool get isAttached => _viewId != null;
 
-  /// Current playlist items, or an empty list when no playlist is active.
+  @override
   List<VlcMediaSource> get playlist => _playlist;
 
-  /// Current playlist index, or `null` when no playlist is active.
+  @override
   int? get playlistIndex => _playlistIndex;
 
-  /// Current playlist loop mode.
+  @override
   VlcPlaylistLoopMode get playlistLoopMode => _playlistLoopMode;
 
-  /// Current media source, including a pending source set before attachment.
+  @override
   VlcMediaSource? get currentMediaSource => _pendingMediaSource;
 
-  /// Whether [next] can move to another item without wrapping.
+  @override
   bool get hasNext => switch (_playlistIndex) {
     final int index => index + 1 < _playlist.length,
     null => false,
   };
 
-  /// Whether [previous] can move to another item without wrapping.
+  @override
   bool get hasPrevious => switch (_playlistIndex) {
     final int index => index > 0,
     null => false,
@@ -161,12 +268,6 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       await _setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
       _ensureNotDisposed();
     }
-  }
-
-  /// Attaches this controller to a Windows texture-backed player instance.
-  @internal
-  Future<int> attachTextureForWindows() async {
-    return attachTexturePlayer();
   }
 
   /// Attaches this controller to a texture-backed player instance.
@@ -232,26 +333,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
   }
 
-  /// Loads a new media URI.
-  ///
-  /// This clears any active playlist. The command can be called before the
-  /// controller is attached; the source is applied when `VlcPlayer` creates the
-  /// native player.
-  Future<void> setSource(
-    Uri source, {
-    bool autoPlay = false,
-    Map<String, String> httpHeaders = const <String, String>{},
-  }) async {
-    return setMedia(
-      VlcMediaSource(uri: source, httpHeaders: httpHeaders),
-      autoPlay: autoPlay,
-    );
-  }
-
-  /// Loads a [VlcMediaSource].
-  ///
-  /// Use this when the item needs HTTP headers, VLC media options, or an
-  /// initial seek position. This clears any active playlist.
+  @override
   Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false}) async {
     _ensureNotDisposed();
     final previousPlaylist = _playlist;
@@ -274,11 +356,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
   }
 
-  /// Loads a playlist and selects [initialIndex].
-  ///
-  /// [sources] must be non-empty. When [autoAdvance] is true, the controller
-  /// advances after VLC reports that the current item ended. [loopMode] controls
-  /// repeat and wrap behavior.
+  @override
   Future<void> setPlaylist(
     List<VlcMediaSource> sources, {
     int initialIndex = 0,
@@ -315,18 +393,12 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     }
   }
 
-  /// Moves to the next playlist item.
-  ///
-  /// Returns `false` when there is no next item and [playlistLoopMode] is
-  /// [VlcPlaylistLoopMode.none]. Throws [StateError] when no playlist is active.
+  @override
   Future<bool> next({bool autoPlay = true}) {
     return _moveInPlaylist(1, autoPlay: autoPlay);
   }
 
-  /// Moves to the previous playlist item.
-  ///
-  /// Returns `false` when there is no previous item and [playlistLoopMode] is
-  /// [VlcPlaylistLoopMode.none]. Throws [StateError] when no playlist is active.
+  @override
   Future<bool> previous({bool autoPlay = true}) {
     return _moveInPlaylist(-1, autoPlay: autoPlay);
   }
@@ -406,18 +478,16 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     _playlistLoopMode = VlcPlaylistLoopMode.none;
   }
 
-  /// Starts or resumes playback.
+  @override
   Future<void> play() => _invoke('play');
 
-  /// Pauses playback.
+  @override
   Future<void> pause() => _invoke('pause');
 
-  /// Stops playback.
+  @override
   Future<void> stop() => _invoke('stop');
 
-  /// Seeks to [position].
-  ///
-  /// [position] must be non-negative.
+  @override
   Future<void> seekTo(Duration position) {
     if (position.isNegative) {
       throw ArgumentError.value(position, 'position', 'Must be non-negative.');
@@ -427,18 +497,14 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     });
   }
 
-  /// Sets VLC volume.
-  ///
-  /// Values are clamped to VLC's `0..200` range.
+  @override
   Future<void> setVolume(int volume) {
     return _invoke('setVolume', <String, Object?>{
       'volume': volume.clamp(0, 200),
     });
   }
 
-  /// Sets playback speed.
-  ///
-  /// [speed] must be finite and greater than zero. `1.0` is normal speed.
+  @override
   Future<void> setPlaybackSpeed(double speed) {
     if (!speed.isFinite || speed <= 0) {
       throw ArgumentError.value(
@@ -450,15 +516,13 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     return _invoke('setPlaybackSpeed', <String, Object?>{'speed': speed});
   }
 
-  /// Returns selectable audio tracks for the current media.
+  @override
   Future<List<VlcTrackDescription>> getAudioTracks() async {
     final tracks = await _invokeFor<List<Object?>>('getAudioTracks');
     return _trackDescriptionsFrom(tracks);
   }
 
-  /// Selects an audio track by VLC track [id].
-  ///
-  /// Use an id returned by [getAudioTracks].
+  @override
   Future<void> setAudioTrack(int id) {
     if (id < 0) {
       throw ArgumentError.value(id, 'id', 'Must be non-negative.');
@@ -466,15 +530,13 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     return _invoke('setAudioTrack', <String, Object?>{'id': id});
   }
 
-  /// Returns selectable embedded subtitle tracks for the current media.
+  @override
   Future<List<VlcTrackDescription>> getSubtitleTracks() async {
     final tracks = await _invokeFor<List<Object?>>('getSubtitleTracks');
     return _trackDescriptionsFrom(tracks);
   }
 
-  /// Selects an embedded subtitle track by VLC track [id].
-  ///
-  /// Use an id returned by [getSubtitleTracks].
+  @override
   Future<void> setSubtitleTrack(int id) {
     if (id < 0) {
       throw ArgumentError.value(id, 'id', 'Must be non-negative.');
@@ -482,12 +544,10 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     return _invoke('setSubtitleTrack', <String, Object?>{'id': id});
   }
 
-  /// Disables subtitle rendering for the current media.
+  @override
   Future<void> disableSubtitle() => _invoke('disableSubtitle');
 
-  /// Adds and selects an external subtitle from [uri].
-  ///
-  /// [uri] can point to a local file or a remote subtitle URL supported by VLC.
+  @override
   Future<void> addSubtitle(Uri uri) {
     final value = uri.toString();
     if (value.isEmpty) {
@@ -496,7 +556,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     return _invoke('addSubtitle', <String, Object?>{'uri': value});
   }
 
-  /// Returns metadata and discovered track details for the current media.
+  @override
   Future<VlcMediaInfo> getMediaInfo() async {
     final info = await _invokeFor<Map<Object?, Object?>>('getMediaInfo');
     return VlcMediaInfo.fromMap(info ?? const <Object?, Object?>{});
@@ -533,7 +593,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     Map<String, Object?> arguments,
   ) async {
     try {
-      return await methodChannel.invokeMethod<T>(method, arguments);
+      return await _methodChannel.invokeMethod<T>(method, arguments);
     } on PlatformException catch (error, stackTrace) {
       Error.throwWithStackTrace(
         VlcPlayerException.fromPlatformException(error),
@@ -547,7 +607,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
     Map<String, Object?> arguments,
   ) async {
     try {
-      return await methodChannel.invokeMapMethod<String, Object?>(
+      return await _methodChannel.invokeMapMethod<String, Object?>(
         method,
         arguments,
       );
@@ -573,7 +633,7 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   }
 
   Future<void> _disposeNativeView(int viewId) {
-    return methodChannel.invokeMethod<void>('dispose', <String, Object?>{
+    return _methodChannel.invokeMethod<void>('dispose', <String, Object?>{
       'viewId': viewId,
     });
   }
