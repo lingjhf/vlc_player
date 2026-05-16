@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.9 - 2026-05-16
+
+### Fixed
+
+- Compared `VlcMediaInfo` and `VlcMediaTrackInfo` instances by value so media
+  metadata snapshots can be reliably compared in application code and tests.
+
 ## 0.7.8 - 2026-05-16
 
 ### Fixed

@@ -116,5 +116,69 @@ void main() {
       expect(video.channels, 2);
       expect(video.sampleRate, isNull);
     });
+
+    test('compares media info and tracks by value', () {
+      const first = VlcMediaInfo(
+        title: 'Clip',
+        artist: 'Artist',
+        album: 'Album',
+        duration: Duration(seconds: 12),
+        videoTracks: <VlcMediaTrackInfo>[
+          VlcMediaTrackInfo(
+            type: 'video',
+            codec: 'h264',
+            width: 1920,
+            height: 1080,
+          ),
+        ],
+        audioTracks: <VlcMediaTrackInfo>[
+          VlcMediaTrackInfo(
+            type: 'audio',
+            codec: 'mp4a',
+            channels: 2,
+            sampleRate: 48000,
+          ),
+        ],
+      );
+      const second = VlcMediaInfo(
+        title: 'Clip',
+        artist: 'Artist',
+        album: 'Album',
+        duration: Duration(seconds: 12),
+        videoTracks: <VlcMediaTrackInfo>[
+          VlcMediaTrackInfo(
+            type: 'video',
+            codec: 'h264',
+            width: 1920,
+            height: 1080,
+          ),
+        ],
+        audioTracks: <VlcMediaTrackInfo>[
+          VlcMediaTrackInfo(
+            type: 'audio',
+            codec: 'mp4a',
+            channels: 2,
+            sampleRate: 48000,
+          ),
+        ],
+      );
+      const changed = VlcMediaInfo(
+        title: 'Clip',
+        duration: Duration(seconds: 12),
+        videoTracks: <VlcMediaTrackInfo>[
+          VlcMediaTrackInfo(
+            type: 'video',
+            codec: 'h265',
+            width: 1920,
+            height: 1080,
+          ),
+        ],
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+      expect(first, isNot(changed));
+      expect(first.videoTracks.single, second.videoTracks.single);
+    });
   });
 }

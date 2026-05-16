@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 class VlcTrackDescription {
   const VlcTrackDescription({
     required this.id,
@@ -71,6 +73,29 @@ class VlcMediaInfo {
         )
         .toList(growable: false);
   }
+
+  @override
+  bool operator ==(Object other) {
+    return other is VlcMediaInfo &&
+        other.title == title &&
+        other.artist == artist &&
+        other.album == album &&
+        other.duration == duration &&
+        listEquals(other.videoTracks, videoTracks) &&
+        listEquals(other.audioTracks, audioTracks) &&
+        listEquals(other.subtitleTracks, subtitleTracks);
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    title,
+    artist,
+    album,
+    duration,
+    Object.hashAll(videoTracks),
+    Object.hashAll(audioTracks),
+    Object.hashAll(subtitleTracks),
+  );
 }
 
 class VlcMediaTrackInfo {
@@ -106,6 +131,31 @@ class VlcMediaTrackInfo {
   final int? height;
   final int? channels;
   final int? sampleRate;
+
+  @override
+  bool operator ==(Object other) {
+    return other is VlcMediaTrackInfo &&
+        other.type == type &&
+        other.codec == codec &&
+        other.language == language &&
+        other.bitrate == bitrate &&
+        other.width == width &&
+        other.height == height &&
+        other.channels == channels &&
+        other.sampleRate == sampleRate;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    type,
+    codec,
+    language,
+    bitrate,
+    width,
+    height,
+    channels,
+    sampleRate,
+  );
 }
 
 Duration _durationFromMilliseconds(Object? value) {
