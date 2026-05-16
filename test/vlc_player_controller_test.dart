@@ -551,6 +551,56 @@ void main() {
       controller.dispose();
     });
 
+    test('auto advance reports native loading failures', () async {
+      var failSetSource = false;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcPlayerController.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (failSetSource && call.method == 'setSource') {
+              throw PlatformException(
+                code: VlcPlayerErrorCode.setSourceFailed,
+                message: 'Could not load playlist item.',
+              );
+            }
+            return null;
+          });
+
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+      ];
+
+      mockEventChannel(60);
+      await controller.attach(60);
+      await controller.setPlaylist(sources, autoAdvance: true);
+      calls.clear();
+      failSetSource = true;
+
+      final channel = EventChannel('vlc_player/events/60');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'ended',
+            }),
+            null,
+          );
+      await pumpEventQueue();
+
+      expect(controller.playlistIndex, 0);
+      expect(controller.value.state, VlcPlaybackState.error);
+      expect(controller.value.error?.code, VlcPlayerErrorCode.setSourceFailed);
+      expect(
+        controller.value.errorDescription,
+        'Could not load playlist item.',
+      );
+
+      controller.dispose();
+    });
+
     test('autoAdvance can be disabled', () async {
       final controller = VlcPlayerController();
       final sources = <VlcMediaSource>[

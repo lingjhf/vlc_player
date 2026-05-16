@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.1 - 2026-05-16
+
+### Fixed
+
+- Report playlist auto-advance loading failures through `VlcPlayerValue.error`
+  instead of leaving them as unhandled asynchronous errors.
+
 ## 0.7.0 - 2026-05-16
 
 ### Added

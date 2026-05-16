@@ -462,12 +462,35 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
       if (_playlistLoopMode == VlcPlaylistLoopMode.loopOne) {
         final current = _pendingMediaSource;
         if (current != null) {
-          unawaited(_setMedia(current, autoPlay: true));
+          _runAutoAdvance(_setMedia(current, autoPlay: true));
         }
       } else if (hasNext || _playlistLoopMode == VlcPlaylistLoopMode.loopAll) {
-        unawaited(next());
+        _runAutoAdvance(next().then<void>((_) {}));
       }
     }
+  }
+
+  void _runAutoAdvance(Future<void> operation) {
+    unawaited(
+      operation.catchError((Object error, StackTrace stackTrace) {
+        _handleAutoAdvanceError(error);
+      }),
+    );
+  }
+
+  void _handleAutoAdvanceError(Object error) {
+    if (_isDisposed) {
+      return;
+    }
+    final playerError = error is VlcPlayerException
+        ? error.error
+        : error is PlatformException
+        ? VlcPlayerError.fromPlatformException(error)
+        : VlcPlayerError(
+            code: VlcPlayerErrorCode.playbackError,
+            message: error.toString(),
+          );
+    _setPlayerError(playerError);
   }
 
   void _handleEventError(Object error) {
@@ -480,6 +503,10 @@ class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
             code: VlcPlayerErrorCode.eventChannelError,
             message: error.toString(),
           );
+    _setPlayerError(playerError);
+  }
+
+  void _setPlayerError(VlcPlayerError playerError) {
     value = value.copyWith(
       state: VlcPlaybackState.error,
       error: playerError,
