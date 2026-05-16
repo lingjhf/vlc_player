@@ -23,20 +23,15 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp(showPlayer: false));
 
-    await tester.tap(find.byKey(const ValueKey<String>('video-example-tile')));
-    await _pumpNavigation(tester);
+    await _openExampleTile(tester, 'video-example-tile');
     expect(find.text('MP4 sample video'), findsOneWidget);
 
     await _popRoute(tester, find.text('MP4 sample video'));
-    await tester.tap(find.byKey(const ValueKey<String>('hls-example-tile')));
-    await _pumpNavigation(tester);
+    await _openExampleTile(tester, 'hls-example-tile');
     expect(find.text('M3U8 sample stream'), findsOneWidget);
 
     await _popRoute(tester, find.text('M3U8 sample stream'));
-    await tester.tap(
-      find.byKey(const ValueKey<String>('full-player-example-tile')),
-    );
-    await _pumpNavigation(tester);
+    await _openExampleTile(tester, 'full-player-example-tile');
     expect(
       find.byKey(const ValueKey<String>('full-player-play-pause-button')),
       findsOneWidget,
@@ -86,10 +81,7 @@ void main() {
   ) async {
     await tester.pumpWidget(const MyApp(showPlayer: false));
 
-    await tester.tap(
-      find.byKey(const ValueKey<String>('full-player-example-tile')),
-    );
-    await _pumpNavigation(tester);
+    await _openExampleTile(tester, 'full-player-example-tile');
 
     await tester.tap(
       find.byKey(const ValueKey<String>('full-player-orientation-button')),
@@ -102,7 +94,19 @@ void main() {
 
 Future<void> _pumpNavigation(WidgetTester tester) async {
   await tester.pump();
-  await tester.pump(const Duration(milliseconds: 300));
+  await tester.pumpAndSettle(
+    const Duration(milliseconds: 50),
+    EnginePhase.sendSemanticsUpdate,
+    const Duration(seconds: 10),
+  );
+}
+
+Future<void> _openExampleTile(WidgetTester tester, String key) async {
+  final tile = find.byKey(ValueKey<String>(key));
+  await tester.ensureVisible(tile);
+  await _pumpNavigation(tester);
+  await tester.tap(tile);
+  await _pumpNavigation(tester);
 }
 
 Future<void> _pumpUntil(WidgetTester tester, bool Function() condition) async {
