@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.7.3 - 2026-05-16
+
+### Changed
+
+- Updated GitHub Actions checkout steps to the Node 24 runtime generation to
+  remove CI deprecation warnings.
+
 ## 0.7.2 - 2026-05-16
 
 ### Fixed
