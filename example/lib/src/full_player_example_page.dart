@@ -29,6 +29,7 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
 
   bool _isLandscape = false;
   bool _wantsPlaying = false;
+  VlcVideoFit _fit = VlcVideoFit.contain;
   double? _dragValue;
   double? _pendingSeekTarget;
 
@@ -61,7 +62,7 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
                         child: widget.showPlayer
-                            ? VlcPlayer(controller: _controller)
+                            ? VlcPlayer(controller: _controller, fit: _fit)
                             : const ColoredBox(color: Colors.black),
                       ),
                     ),
@@ -95,8 +96,11 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
                       canControl: widget.showPlayer && _controller.isAttached,
                       isPlaying: _isShowingPlaying(value),
                       isLandscape: _isLandscape,
+                      fit: _fit,
                       seekValue: displayedSeekValue,
                       onPlayPause: () => unawaited(_togglePlayPause(value)),
+                      onSnapshot: () => unawaited(_takeSnapshot()),
+                      onCycleFit: _cycleFit,
                       onSeekStart: (value) {
                         setState(() {
                           _dragValue = value;
@@ -138,6 +142,35 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
         _wantsPlaying = wasPlaying;
       });
     }
+  }
+
+  Future<void> _takeSnapshot() async {
+    if (!widget.showPlayer || !_controller.isAttached) {
+      return;
+    }
+    try {
+      final bytes = await _controller.takeSnapshot(width: 320);
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Snapshot captured (${bytes.length} bytes)')),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Snapshot failed: $error')));
+    }
+  }
+
+  void _cycleFit() {
+    final values = VlcVideoFit.values;
+    setState(() {
+      _fit = values[(_fit.index + 1) % values.length];
+    });
   }
 
   bool _isShowingPlaying(VlcPlayerValue value) {
@@ -255,8 +288,11 @@ class _PlayerControls extends StatelessWidget {
     required this.canControl,
     required this.isPlaying,
     required this.isLandscape,
+    required this.fit,
     required this.seekValue,
     required this.onPlayPause,
+    required this.onSnapshot,
+    required this.onCycleFit,
     required this.onSeekStart,
     required this.onSeekChanged,
     required this.onSeekEnd,
@@ -267,8 +303,11 @@ class _PlayerControls extends StatelessWidget {
   final bool canControl;
   final bool isPlaying;
   final bool isLandscape;
+  final VlcVideoFit fit;
   final double? seekValue;
   final VoidCallback onPlayPause;
+  final VoidCallback onSnapshot;
+  final VoidCallback onCycleFit;
   final ValueChanged<double> onSeekStart;
   final ValueChanged<double> onSeekChanged;
   final ValueChanged<double> onSeekEnd;
@@ -328,8 +367,24 @@ class _PlayerControls extends StatelessWidget {
                 Text(
                   '${_formatDuration(displayedPosition)} / $durationLabel',
                   style: const TextStyle(color: Colors.white),
+                  overflow: TextOverflow.ellipsis,
                 ),
                 const Spacer(),
+                IconButton(
+                  key: const ValueKey<String>('full-player-snapshot-button'),
+                  onPressed: canControl && value.isReady ? onSnapshot : null,
+                  color: Colors.white,
+                  disabledColor: Colors.white38,
+                  icon: const Icon(Icons.camera_alt),
+                  tooltip: 'Snapshot',
+                ),
+                IconButton(
+                  key: const ValueKey<String>('full-player-fit-button'),
+                  onPressed: onCycleFit,
+                  color: Colors.white,
+                  icon: const Icon(Icons.fit_screen),
+                  tooltip: 'Fit ${fit.name}',
+                ),
                 IconButton(
                   key: const ValueKey<String>('full-player-orientation-button'),
                   onPressed: onToggleOrientation,

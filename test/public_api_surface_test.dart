@@ -20,7 +20,7 @@ void main() {
     expect(library, isNot(contains("export 'src/method_channel")));
   });
 
-  test('controller constructor exposes only the current pre-1.0 API', () {
+  test('controller constructor exposes only the supported public API', () {
     final controllerClass = _classBlock(
       _fileText('lib/src/vlc_player_controller.dart'),
       'VlcPlayerController',
@@ -63,7 +63,8 @@ void main() {
       '### VlcMediaSource',
     );
 
-    expect(readme, contains('## API stability before 1.0'));
+    expect(readme, contains('## API stability'));
+    expect(readme, contains('## Migrating from 0.8.x'));
     expect(readme, contains('## Migrating from 0.7.21 or earlier'));
     expect(controllerReference, contains('mediaSource'));
     expect(controllerReference, contains('setMedia(VlcMediaSource source'));

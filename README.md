@@ -50,7 +50,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^0.8.0
+  vlc_player: ^1.0.0
 ```
 
 If you are using this repository directly:
@@ -78,10 +78,19 @@ runtime and source components that app distributors need to account for.
 
 ### Android
 
+The Android implementation requires `minSdk 26` or newer.
+
 Network playback requires internet permission. The plugin manifest declares it:
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
+```
+
+The repository CI checks Android APKs for 16 KB native page-size support across
+64-bit packaged native libraries:
+
+```sh
+tool/ci/check_android_16kb_page_size.sh example/build/app/outputs/flutter-apk/app-debug.apk
 ```
 
 ### iOS
@@ -211,6 +220,22 @@ await controller.pause();
 await controller.seekTo(const Duration(seconds: 30));
 await controller.setVolume(100);
 await controller.setPlaybackSpeed(1.25);
+await controller.setAudioDelay(const Duration(milliseconds: -120));
+await controller.setSubtitleDelay(const Duration(milliseconds: 250));
+
+final pngBytes = await controller.takeSnapshot(width: 320);
+debugPrint('snapshot bytes=${pngBytes.length}');
+```
+
+### Fit the video
+
+Use `VlcPlayer.fit` to choose how the native video is fitted inside the widget:
+
+```dart
+VlcPlayer(
+  controller: controller,
+  fit: VlcVideoFit.cover,
+)
 ```
 
 ### Play with headers and VLC media options
@@ -249,6 +274,11 @@ await controller.setPlaylist(
 
 await controller.next();
 await controller.previous();
+await controller.jumpTo(0);
+await controller.addToPlaylist(
+  VlcMediaSource(uri: Uri.parse('https://example.com/bonus.mp4')),
+);
+await controller.shufflePlaylist(seed: 42);
 ```
 
 ### Select tracks and subtitles
@@ -279,17 +309,22 @@ Native platform failures throw `VlcPlayerException`, which exposes a structured
 `setMedia()` can be called before attachment. The media source is replayed when
 the platform view is created.
 
-## API stability before 1.0
+## API stability
 
-The package is still in the `0.x` line, so the Dart API can change between
-minor releases while the plugin is being hardened for production use. Current
-work is intentionally removing compatibility shortcuts before `1.0.0` instead
-of carrying multiple ways to perform the same operation.
+The `1.x` line follows Semantic Versioning. Backward-compatible additions use
+minor versions, fixes use patch versions, and breaking API, platform, or
+behavior changes use major versions.
 
 Use the exported `package:vlc_player/vlc_player.dart` library as the supported
 application-facing API. Native view attachment, texture creation, method
 channels, and platform view type details are implementation internals and are
 not part of the supported API contract.
+
+## Migrating from 0.8.x
+
+Version `1.0.0` raises the Android minimum SDK from 24 to 26. Apps embedding the
+plugin must set `minSdk 26` or newer in their Android app module. This change is
+required because Android snapshots use `PixelCopy` directly.
 
 ## Migrating from 0.7.21 or earlier
 
@@ -348,6 +383,7 @@ VlcPlayer({
   Key? key,
   required VlcPlayerController controller,
   Color backgroundColor = Colors.black,
+  VlcVideoFit fit = VlcVideoFit.contain,
 })
 ```
 
@@ -355,6 +391,7 @@ Parameters:
 
 - `controller`: Controls the native VLC player attached to this widget.
 - `backgroundColor`: Background color shown behind the native video view.
+- `fit`: How video is fitted inside the widget bounds.
 
 ### VlcPlayerController
 
@@ -391,6 +428,16 @@ Methods:
   `false` at the end of the playlist.
 - `previous({bool autoPlay = true})`: Moves to the previous playlist item.
   Returns `false` at the beginning of the playlist.
+- `jumpTo(int index, {bool autoPlay = true})`: Loads a playlist item by index.
+- `addToPlaylist(VlcMediaSource source)`: Appends a media item to the active
+  playlist.
+- `insertIntoPlaylist(int index, VlcMediaSource source)`: Inserts a media item
+  into the active playlist.
+- `removeFromPlaylistAt(int index)`: Removes a media item and updates the
+  current item selection.
+- `clearPlaylist()`: Stops active playlist playback and clears playlist state.
+- `shufflePlaylist({int? seed})`: Shuffles the active playlist while preserving
+  the current item.
 - `play()`: Starts or resumes playback.
 - `pause()`: Pauses playback.
 - `stop()`: Stops playback.
@@ -398,6 +445,13 @@ Methods:
 - `setVolume(int volume)`: Sets volume. Values are clamped to `0..200`.
 - `setPlaybackSpeed(double speed)`: Sets playback speed. The value must be
   finite and greater than zero.
+- `setAudioDelay(Duration delay)`: Sets VLC audio delay. Negative values play
+  audio earlier.
+- `setSubtitleDelay(Duration delay)`: Sets VLC subtitle delay. Negative values
+  show subtitles earlier.
+- `takeSnapshot({int? width, int? height})`: Captures the current video as PNG
+  bytes. If only one dimension is provided, VLC preserves the source aspect
+  ratio where the platform API supports it.
 - `getAudioTracks()`: Returns available audio tracks.
 - `setAudioTrack(int id)`: Selects an audio track by VLC track id.
 - `getSubtitleTracks()`: Returns available embedded subtitle tracks.
@@ -475,6 +529,8 @@ Fields:
 - `duration`: Media duration.
 - `volume`: Current volume.
 - `playbackSpeed`: Current playback speed.
+- `audioDelay`: Current audio delay.
+- `subtitleDelay`: Current subtitle delay.
 - `isReady`: Whether the native player has reached a playable terminal or
   active playback state.
 - `isSeekable`: Whether VLC reports the current media as seekable.
@@ -543,7 +599,7 @@ The `example` app contains:
 - A video file playback page.
 - An HLS stream playback page.
 - A full player page with play/pause, seek, time display, and orientation
-  controls.
+  controls, fit selection, and snapshot capture.
 
 Run it on macOS:
 

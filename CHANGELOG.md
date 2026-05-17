@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-05-18
+
+### Added
+
+- Added `VlcPlayer.fit` with `VlcVideoFit.contain`, `cover`, `fill`, and
+  `none` modes.
+- Added `takeSnapshot()`, `setAudioDelay()`, and `setSubtitleDelay()` to
+  `VlcPlayerController`, with native implementations on Android, iOS, macOS,
+  Linux, and Windows.
+- Added playlist mutation APIs: `jumpTo()`, `addToPlaylist()`,
+  `insertIntoPlaylist()`, `removeFromPlaylistAt()`, `clearPlaylist()`, and
+  `shufflePlaylist()`.
+- Added `audioDelay` and `subtitleDelay` to `VlcPlayerValue`.
+- Added CI validation for Android 16 KB native page-size support on 64-bit
+  packaged libraries.
+
+### Changed
+
+- Promoted the package to `1.0.0` after the Dart API cleanup, native feature
+  completion, and CI validation work.
+
+### Breaking
+
+- Android now requires `minSdk 26` because snapshots use Android `PixelCopy`
+  directly.
+
 ## 0.8.0 - 2026-05-18
 
 ### Changed
