@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -545,8 +544,10 @@ class _VlcPlayerController extends VlcPlayerController
     _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
     _playlistIndex = currentSource == null
         ? 0
-        : _playlist.indexOf(currentSource).clamp(0, _playlist.length - 1)
-              as int;
+        : _playlist
+              .indexOf(currentSource)
+              .clamp(0, _playlist.length - 1)
+              .toInt();
   }
 
   Future<bool> _moveInPlaylist(int delta, {required bool autoPlay}) async {
@@ -684,8 +685,8 @@ class _VlcPlayerController extends VlcPlayerController
       throw ArgumentError.value(height, 'height', 'Must be positive.');
     }
     final data = await _invokeFor<Uint8List>('takeSnapshot', <String, Object?>{
-      if (width != null) 'width': width,
-      if (height != null) 'height': height,
+      'width': ?width,
+      'height': ?height,
     });
     if (data == null || data.isEmpty) {
       throw StateError('vlc_player snapshot returned no image data.');
