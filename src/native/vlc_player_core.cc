@@ -21,6 +21,22 @@ int64_t NonNegative(libvlc_time_t value) {
 
 std::atomic<uint64_t> g_snapshot_counter{0};
 
+std::string EnvironmentValue(const char* name) {
+#ifdef _WIN32
+  char* value = nullptr;
+  size_t size = 0;
+  if (_dupenv_s(&value, &size, name) != 0 || value == nullptr) {
+    return "";
+  }
+  std::string result(value);
+  std::free(value);
+  return result;
+#else
+  const char* value = std::getenv(name);
+  return value == nullptr ? "" : value;
+#endif
+}
+
 std::string TemporarySnapshotPath() {
 #ifdef _WIN32
   const char* env_names[] = {"TEMP", "TMP"};
@@ -32,8 +48,8 @@ std::string TemporarySnapshotPath() {
   std::string directory = "/tmp";
 #endif
   for (const char* name : env_names) {
-    const char* value = std::getenv(name);
-    if (value != nullptr && value[0] != '\0') {
+    const std::string value = EnvironmentValue(name);
+    if (!value.empty()) {
       directory = value;
       break;
     }
