@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.7.25 - 2026-05-17
+
+### Changed
+
+- Reduced duplicated Dart controller native invocation code by centralizing
+  attached-player argument construction, source argument construction, and
+  `PlatformException` mapping.
+- Avoided no-op desktop orientation channel calls in the example full-player
+  page, which makes macOS driver integration tests finish reliably.
+- Added regression coverage for texture-backed native player creation failures.
+
 ## 0.7.24 - 2026-05-17
 
 ### Changed

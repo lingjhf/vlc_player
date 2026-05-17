@@ -465,15 +465,10 @@ class _VlcPlayerController extends VlcPlayerController
       return;
     }
 
-    await _invokeNative<void>('setSource', <String, Object?>{
-      'viewId': viewId,
-      'uri': source.uri.toString(),
-      'autoPlay': autoPlay,
-      'httpHeaders': source.httpHeaders,
-      if (source.mediaOptions.isNotEmpty) 'mediaOptions': source.mediaOptions,
-      if (source.startPosition > Duration.zero)
-        'startPosition': source.startPosition.inMilliseconds,
-    });
+    await _invokeNative<void>(
+      'setSource',
+      _sourceArguments(viewId, source, autoPlay: autoPlay),
+    );
   }
 
   void _clearPlaylist() {
@@ -568,54 +563,62 @@ class _VlcPlayerController extends VlcPlayerController
   }
 
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) {
-    _ensureNotDisposed();
-    final viewId = _viewId;
-    if (viewId == null) {
-      throw StateError('The controller is not attached to a VlcPlayer.');
-    }
-
-    return _invokeNative<void>(method, <String, Object?>{
-      'viewId': viewId,
-      if (arguments != null) ...arguments,
-    });
+    return _invokeFor<void>(method, arguments);
   }
 
   Future<T?> _invokeFor<T>(String method, [Map<String, Object?>? arguments]) {
+    return _invokeNative<T>(method, _attachedArguments(arguments));
+  }
+
+  Map<String, Object?> _attachedArguments([Map<String, Object?>? arguments]) {
     _ensureNotDisposed();
     final viewId = _viewId;
     if (viewId == null) {
       throw StateError('The controller is not attached to a VlcPlayer.');
     }
 
-    return _invokeNative<T>(method, <String, Object?>{
+    return <String, Object?>{
       'viewId': viewId,
       if (arguments != null) ...arguments,
-    });
+    };
   }
 
-  Future<T?> _invokeNative<T>(
-    String method,
-    Map<String, Object?> arguments,
-  ) async {
-    try {
-      return await _methodChannel.invokeMethod<T>(method, arguments);
-    } on PlatformException catch (error, stackTrace) {
-      Error.throwWithStackTrace(
-        VlcPlayerException.fromPlatformException(error),
-        stackTrace,
-      );
-    }
+  Map<String, Object?> _sourceArguments(
+    int viewId,
+    VlcMediaSource source, {
+    required bool autoPlay,
+  }) {
+    return <String, Object?>{
+      'viewId': viewId,
+      'uri': source.uri.toString(),
+      'autoPlay': autoPlay,
+      'httpHeaders': source.httpHeaders,
+      if (source.mediaOptions.isNotEmpty) 'mediaOptions': source.mediaOptions,
+      if (source.startPosition > Duration.zero)
+        'startPosition': source.startPosition.inMilliseconds,
+    };
+  }
+
+  Future<T?> _invokeNative<T>(String method, Map<String, Object?> arguments) {
+    return _mapPlatformException(
+      () => _methodChannel.invokeMethod<T>(method, arguments),
+    );
   }
 
   Future<Map<String, Object?>?> _invokeNativeMap(
     String method,
     Map<String, Object?> arguments,
+  ) {
+    return _mapPlatformException(
+      () => _methodChannel.invokeMapMethod<String, Object?>(method, arguments),
+    );
+  }
+
+  static Future<T> _mapPlatformException<T>(
+    Future<T> Function() operation,
   ) async {
     try {
-      return await _methodChannel.invokeMapMethod<String, Object?>(
-        method,
-        arguments,
-      );
+      return await operation();
     } on PlatformException catch (error, stackTrace) {
       Error.throwWithStackTrace(
         VlcPlayerException.fromPlatformException(error),

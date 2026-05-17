@@ -1,4 +1,6 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player_example/main.dart';
 import 'package:vlc_player_example/src/player_example_view.dart';
@@ -46,5 +48,41 @@ void main() {
       find.byType(PlayerExampleView),
     );
     expect(page.controller.options, <String>['--aout=dummy']);
+  });
+
+  testWidgets('desktop orientation control only updates local state', (
+    WidgetTester tester,
+  ) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+    final platformCalls = <MethodCall>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, (call) async {
+          platformCalls.add(call);
+          return null;
+        });
+
+    try {
+      await tester.pumpWidget(const MyApp(showPlayer: false));
+      await tester.tap(
+        find.byKey(const ValueKey<String>('full-player-example-tile')),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(
+        find.byKey(const ValueKey<String>('full-player-orientation-button')),
+      );
+      await tester.pump();
+
+      expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);
+      expect(
+        platformCalls.where(
+          (call) => call.method == 'SystemChrome.setPreferredOrientations',
+        ),
+        isEmpty,
+      );
+    } finally {
+      debugDefaultTargetPlatformOverride = null;
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null);
+    }
   });
 }

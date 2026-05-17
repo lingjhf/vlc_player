@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:vlc_player/vlc_player.dart';
@@ -204,6 +205,9 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
     setState(() {
       _isLandscape = nextLandscape;
     });
+    if (!_supportsPreferredOrientations) {
+      return;
+    }
     await SystemChrome.setPreferredOrientations(
       nextLandscape
           ? <DeviceOrientation>[
@@ -218,7 +222,15 @@ class _FullPlayerExamplePageState extends State<FullPlayerExamplePage> {
   }
 
   Future<void> _restoreSystemUi() {
+    if (!_supportsPreferredOrientations) {
+      return Future<void>.value();
+    }
     return SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+  }
+
+  bool get _supportsPreferredOrientations {
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS;
   }
 
   Future<bool> _runPlayerCommand(Future<void> Function() command) async {

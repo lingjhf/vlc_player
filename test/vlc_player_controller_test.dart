@@ -899,6 +899,46 @@ void main() {
       controller.dispose();
     });
 
+    test('attachTexturePlayer wraps native creation errors', () async {
+      final controller = VlcPlayerController(
+        options: const <String>['--network-caching=1000'],
+      );
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            throw PlatformException(
+              code: VlcPlayerErrorCode.playerNotFound,
+              message: 'Create failed',
+              details: <String, Object?>{'stage': 'create'},
+            );
+          });
+
+      await expectLater(
+        harness.attachTexturePlayer(controller),
+        throwsA(
+          isA<VlcPlayerException>()
+              .having(
+                (error) => error.code,
+                'code',
+                VlcPlayerErrorCode.playerNotFound,
+              )
+              .having((error) => error.message, 'message', 'Create failed')
+              .having((error) => error.details, 'details', <String, Object?>{
+                'stage': 'create',
+              }),
+        ),
+      );
+      expect(calls.single.method, 'create');
+      expect(calls.single.arguments, <String, Object?>{
+        'options': <String>['--network-caching=1000'],
+      });
+
+      controller.dispose();
+    });
+
     test(
       'attachTexturePlayer releases native player if disposed during create',
       () async {
