@@ -1,26 +1,34 @@
 package com.lingjhf.vlc_player
 
+import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
+import android.graphics.Bitmap
 import android.graphics.Color
+import android.graphics.Rect
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.view.PixelCopy
 import android.view.View
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
+import java.io.ByteArrayOutputStream
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
+import org.videolan.libvlc.MediaPlayer.ScaleType
 import org.videolan.libvlc.interfaces.IMedia
 import org.videolan.libvlc.util.VLCVideoLayout
 
 internal class VlcPlayerPlatformView(
-    context: Context,
+    private val context: Context,
     messenger: BinaryMessenger,
     viewIdentifier: Int,
     options: ArrayList<String>,
+    fit: String,
     private val onDispose: (Long, VlcPlayerPlatformView) -> Unit,
 ) : PlatformView, MediaPlayer.EventListener {
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -44,6 +52,7 @@ internal class VlcPlayerPlatformView(
         videoLayout.setBackgroundColor(Color.BLACK)
         mediaPlayer.setEventListener(this)
         attachViewsIfNeeded()
+        mediaPlayer.setVideoScale(scaleTypeFor(fit))
         eventChannel.setStreamHandler(streamHandler)
     }
 
@@ -155,6 +164,73 @@ internal class VlcPlayerPlatformView(
         mediaPlayer.rate = playbackSpeed
         sendSnapshot()
         result.success(null)
+    }
+
+    fun setAudioDelay(microseconds: Long, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        if (!mediaPlayer.setAudioDelay(microseconds)) {
+            result.error("vlc_error", "VLC failed to set audio delay.", null)
+            return
+        }
+        sendSnapshot()
+        result.success(null)
+    }
+
+    fun setSubtitleDelay(microseconds: Long, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        if (!mediaPlayer.setSpuDelay(microseconds)) {
+            result.error("vlc_error", "VLC failed to set subtitle delay.", null)
+            return
+        }
+        sendSnapshot()
+        result.success(null)
+    }
+
+    fun takeSnapshot(width: Int, height: Int, result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+        val activity = activityFrom(context)
+        if (activity == null) {
+            result.error("snapshot_failed", "Unable to locate the Android activity window.", null)
+            return
+        }
+        if (videoLayout.width <= 0 || videoLayout.height <= 0) {
+            result.error("snapshot_failed", "The video view has no rendered size.", null)
+            return
+        }
+
+        val location = IntArray(2)
+        videoLayout.getLocationInWindow(location)
+        val sourceRect = Rect(
+            location[0],
+            location[1],
+            location[0] + videoLayout.width,
+            location[1] + videoLayout.height,
+        )
+        val snapshotWidth = if (width > 0) width else videoLayout.width
+        val snapshotHeight = if (height > 0) height else videoLayout.height
+        val bitmap = Bitmap.createBitmap(snapshotWidth, snapshotHeight, Bitmap.Config.ARGB_8888)
+
+        PixelCopy.request(activity.window, sourceRect, bitmap, { copyResult ->
+            if (copyResult != PixelCopy.SUCCESS) {
+                bitmap.recycle()
+                result.error("snapshot_failed", "Android PixelCopy failed with code $copyResult.", null)
+                return@request
+            }
+            val output = ByteArrayOutputStream()
+            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)) {
+                bitmap.recycle()
+                result.error("snapshot_failed", "Android failed to encode the snapshot PNG.", null)
+                return@request
+            }
+            bitmap.recycle()
+            result.success(output.toByteArray())
+        }, mainHandler)
     }
 
     fun getAudioTracks(result: MethodChannel.Result) {
@@ -421,6 +497,8 @@ internal class VlcPlayerPlatformView(
         event["duration"] = duration
         event["volume"] = volume
         event["playbackSpeed"] = playbackSpeed.toDouble()
+        event["audioDelay"] = mediaPlayer.audioDelay
+        event["subtitleDelay"] = mediaPlayer.spuDelay
         event["isReady"] = isReadyState(state)
         event["isSeekable"] = isSeekable
         event["isLive"] = isLiveState(state) && duration == 0L && !isSeekable
@@ -485,6 +563,26 @@ internal class VlcPlayerPlatformView(
         const val STATE_ERROR = "error"
         const val ERROR_PLAYBACK = "playback_error"
         const val ERROR_SET_SOURCE_FAILED = "set_source_failed"
+
+        fun scaleTypeFor(fit: String): ScaleType {
+            return when (fit) {
+                "cover" -> ScaleType.SURFACE_FIT_SCREEN
+                "fill" -> ScaleType.SURFACE_FILL
+                "none" -> ScaleType.SURFACE_ORIGINAL
+                else -> ScaleType.SURFACE_BEST_FIT
+            }
+        }
+
+        fun activityFrom(context: Context): Activity? {
+            var current = context
+            while (current is ContextWrapper) {
+                if (current is Activity) {
+                    return current
+                }
+                current = current.baseContext
+            }
+            return null
+        }
 
         fun isReadyState(state: String): Boolean {
             return state == STATE_PLAYING ||

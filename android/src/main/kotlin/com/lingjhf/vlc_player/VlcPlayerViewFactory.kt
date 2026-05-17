@@ -17,6 +17,7 @@ internal class VlcPlayerViewFactory(
             messenger,
             viewId,
             readOptions(args),
+            readFit(args),
             onDispose,
         )
         onCreate(viewId.toLong(), view)
@@ -33,5 +34,9 @@ internal class VlcPlayerViewFactory(
             }
         }
         return options
+    }
+
+    private fun readFit(args: Any?): String {
+        return ((args as? Map<*, *>)?.get("fit") as? String) ?: "contain"
     }
 }

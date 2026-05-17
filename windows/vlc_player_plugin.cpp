@@ -360,6 +360,26 @@ class WindowsVlcPlayer {
     });
   }
 
+  std::string SetAudioDelay(int64_t microseconds) {
+    return RunAndSendSnapshot([this, microseconds] {
+      return core_->SetAudioDelay(microseconds);
+    });
+  }
+
+  std::string SetSubtitleDelay(int64_t microseconds) {
+    return RunAndSendSnapshot([this, microseconds] {
+      return core_->SetSubtitleDelay(microseconds);
+    });
+  }
+
+  std::vector<uint8_t> TakeSnapshot(uint32_t width,
+                                    uint32_t height,
+                                    std::string *error) {
+    std::vector<uint8_t> data = core_->TakeSnapshot(width, height, error);
+    SendSnapshot();
+    return data;
+  }
+
   EncodableList GetAudioTracks() {
     return TrackDescriptions(core_->GetAudioTracks());
   }
@@ -443,6 +463,10 @@ class WindowsVlcPlayer {
     event[EncodableValue("volume")] = EncodableValue(snapshot.volume);
     event[EncodableValue("playbackSpeed")] =
         EncodableValue(snapshot.playback_speed);
+    event[EncodableValue("audioDelay")] =
+        EncodableValue(snapshot.audio_delay);
+    event[EncodableValue("subtitleDelay")] =
+        EncodableValue(snapshot.subtitle_delay);
     event[EncodableValue("isReady")] = EncodableValue(snapshot.is_ready);
     event[EncodableValue("isSeekable")] = EncodableValue(snapshot.is_seekable);
     event[EncodableValue("isLive")] = EncodableValue(snapshot.is_live);
@@ -648,6 +672,41 @@ void VlcPlayerPlugin::HandleMethodCall(
       return;
     }
     error = player->SetPlaybackSpeed(speed);
+  } else if (method_call.method_name() == "setAudioDelay") {
+    int64_t delay = 0;
+    if (!ReadInt64(*arguments, "delay", &delay)) {
+      result->Error("invalid_args", "An audio delay value is required.");
+      return;
+    }
+    error = player->SetAudioDelay(delay);
+  } else if (method_call.method_name() == "setSubtitleDelay") {
+    int64_t delay = 0;
+    if (!ReadInt64(*arguments, "delay", &delay)) {
+      result->Error("invalid_args", "A subtitle delay value is required.");
+      return;
+    }
+    error = player->SetSubtitleDelay(delay);
+  } else if (method_call.method_name() == "takeSnapshot") {
+    int64_t width = 0;
+    int64_t height = 0;
+    if (ReadInt64(*arguments, "width", &width) && width <= 0) {
+      result->Error("invalid_args", "Snapshot dimensions must be positive.");
+      return;
+    }
+    if (ReadInt64(*arguments, "height", &height) && height <= 0) {
+      result->Error("invalid_args", "Snapshot dimensions must be positive.");
+      return;
+    }
+    std::string snapshot_error;
+    const std::vector<uint8_t> data = player->TakeSnapshot(
+        static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+        &snapshot_error);
+    if (!snapshot_error.empty()) {
+      result->Error("snapshot_failed", snapshot_error);
+      return;
+    }
+    result->Success(EncodableValue(data));
+    return;
   } else if (method_call.method_name() == "getAudioTracks") {
     result->Success(EncodableValue(player->GetAudioTracks()));
     return;

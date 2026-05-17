@@ -1,10 +1,15 @@
 #include "vlc_player_core.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <sstream>
+#include <thread>
 #include <utility>
 
 namespace vlc_player {
@@ -12,6 +17,57 @@ namespace {
 
 int64_t NonNegative(libvlc_time_t value) {
   return std::max<int64_t>(0, value);
+}
+
+std::atomic<uint64_t> g_snapshot_counter{0};
+
+std::string TemporarySnapshotPath() {
+#ifdef _WIN32
+  const char* env_names[] = {"TEMP", "TMP"};
+  const char separator = '\\';
+  std::string directory = ".";
+#else
+  const char* env_names[] = {"TMPDIR", "TEMP", "TMP"};
+  const char separator = '/';
+  std::string directory = "/tmp";
+#endif
+  for (const char* name : env_names) {
+    const char* value = std::getenv(name);
+    if (value != nullptr && value[0] != '\0') {
+      directory = value;
+      break;
+    }
+  }
+  if (!directory.empty() && directory.back() != '/' &&
+      directory.back() != '\\') {
+    directory.push_back(separator);
+  }
+
+  const auto timestamp =
+      std::chrono::duration_cast<std::chrono::microseconds>(
+          std::chrono::system_clock::now().time_since_epoch())
+          .count();
+  const uint64_t counter = g_snapshot_counter.fetch_add(1);
+  std::ostringstream path;
+  path << directory << "vlc_player_snapshot_" << timestamp << "_" << counter
+       << ".png";
+  return path.str();
+}
+
+bool ReadFileIfReady(const std::string& path, std::vector<uint8_t>* data) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return false;
+  }
+  const std::ifstream::pos_type size = file.tellg();
+  if (size <= 0) {
+    return false;
+  }
+  const auto byte_count = static_cast<std::streamsize>(size);
+  data->resize(static_cast<size_t>(byte_count));
+  file.seekg(0, std::ios::beg);
+  file.read(reinterpret_cast<char*>(data->data()), byte_count);
+  return file.good();
 }
 
 }  // namespace
@@ -170,6 +226,72 @@ std::string VlcPlayerCore::SetPlaybackSpeed(double speed) {
   return "";
 }
 
+std::string VlcPlayerCore::SetAudioDelay(int64_t microseconds) {
+  if (const auto error = ActiveError(); !error.empty()) {
+    return error;
+  }
+  if (!player_->setAudioDelay(microseconds)) {
+    return "VLC failed to set audio delay.";
+  }
+  return "";
+}
+
+std::string VlcPlayerCore::SetSubtitleDelay(int64_t microseconds) {
+  if (const auto error = ActiveError(); !error.empty()) {
+    return error;
+  }
+  if (player_->setSpuDelay(microseconds) != 0) {
+    return "VLC failed to set subtitle delay.";
+  }
+  return "";
+}
+
+std::vector<uint8_t> VlcPlayerCore::TakeSnapshot(uint32_t width,
+                                                 uint32_t height,
+                                                 std::string* error) {
+  if (error != nullptr) {
+    error->clear();
+  }
+  if (const auto active_error = ActiveError(); !active_error.empty()) {
+    if (error != nullptr) {
+      *error = active_error;
+    }
+    return {};
+  }
+
+  auto media = player_->media();
+  if (media == nullptr) {
+    if (error != nullptr) {
+      *error = "No media is loaded.";
+    }
+    return {};
+  }
+
+  const std::string path = TemporarySnapshotPath();
+  if (!player_->takeSnapshot(0, path, width, height)) {
+    std::remove(path.c_str());
+    if (error != nullptr) {
+      *error = "VLC failed to take a snapshot.";
+    }
+    return {};
+  }
+
+  for (int attempt = 0; attempt < 40; ++attempt) {
+    std::vector<uint8_t> data;
+    if (ReadFileIfReady(path, &data)) {
+      std::remove(path.c_str());
+      return data;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
+  }
+
+  std::remove(path.c_str());
+  if (error != nullptr) {
+    *error = "VLC did not produce snapshot image data.";
+  }
+  return {};
+}
+
 std::vector<VlcTrackDescription> VlcPlayerCore::GetAudioTracks() {
   if (!is_valid()) {
     return {};
@@ -298,6 +420,8 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   snapshot.position = NonNegative(player_->time());
   snapshot.duration = NonNegative(player_->length());
   snapshot.playback_speed = static_cast<double>(player_->rate());
+  snapshot.audio_delay = player_->audioDelay();
+  snapshot.subtitle_delay = player_->spuDelay();
   snapshot.is_ready = IsReadyState(snapshot.state);
   snapshot.is_seekable = player_->isSeekable();
   snapshot.is_live = IsLiveState(snapshot.state) && snapshot.duration == 0 &&

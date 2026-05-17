@@ -41,6 +41,11 @@ class VlcPlayerCore {
   std::string SeekTo(int64_t milliseconds);
   std::string SetVolume(int volume);
   std::string SetPlaybackSpeed(double speed);
+  std::string SetAudioDelay(int64_t microseconds);
+  std::string SetSubtitleDelay(int64_t microseconds);
+  std::vector<uint8_t> TakeSnapshot(uint32_t width,
+                                    uint32_t height,
+                                    std::string* error);
 
   std::vector<VlcTrackDescription> GetAudioTracks();
   std::string SetAudioTrack(int id);

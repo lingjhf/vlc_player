@@ -95,6 +95,33 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                 player.setPlaybackSpeed(speed, result)
             }
+            "setAudioDelay" -> {
+                val delay = call.argument<Number>("delay")?.toLong()
+                if (delay == null) {
+                    result.error("invalid_args", "An audio delay value is required.", null)
+                    return
+                }
+                player.setAudioDelay(delay, result)
+            }
+            "setSubtitleDelay" -> {
+                val delay = call.argument<Number>("delay")?.toLong()
+                if (delay == null) {
+                    result.error("invalid_args", "A subtitle delay value is required.", null)
+                    return
+                }
+                player.setSubtitleDelay(delay, result)
+            }
+            "takeSnapshot" -> {
+                val rawWidth = call.argument<Number>("width")?.toInt()
+                val rawHeight = call.argument<Number>("height")?.toInt()
+                if ((rawWidth != null && rawWidth <= 0) || (rawHeight != null && rawHeight <= 0)) {
+                    result.error("invalid_args", "Snapshot dimensions must be positive.", null)
+                    return
+                }
+                val width = rawWidth ?: 0
+                val height = rawHeight ?: 0
+                player.takeSnapshot(width, height, result)
+            }
             "getAudioTracks" -> player.getAudioTracks(result)
             "setAudioTrack" -> {
                 val id = call.argument<Number>("id")?.toInt()

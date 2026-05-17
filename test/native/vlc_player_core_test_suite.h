@@ -34,6 +34,8 @@ TEST(VlcPlayerCore, SnapshotWithoutMediaIsIdle) {
   EXPECT_EQ(snapshot.position, 0);
   EXPECT_EQ(snapshot.duration, 0);
   EXPECT_EQ(snapshot.volume, 100);
+  EXPECT_EQ(snapshot.audio_delay, 0);
+  EXPECT_EQ(snapshot.subtitle_delay, 0);
 }
 
 TEST(VlcPlayerCore, RejectsEmptySourceUri) {
@@ -68,6 +70,18 @@ TEST(VlcPlayerCore, RejectsInvalidPlaybackSpeeds) {
             "A finite positive playback speed is required.");
   EXPECT_EQ(core->SetPlaybackSpeed(std::numeric_limits<double>::infinity()),
             "A finite positive playback speed is required.");
+}
+
+TEST(VlcPlayerCore, TakeSnapshotWithoutMediaFailsClearly) {
+  auto core = MakeCore();
+  std::string error;
+
+  ASSERT_TRUE(core->is_valid()) << core->error();
+
+  const std::vector<uint8_t> data = core->TakeSnapshot(0, 0, &error);
+
+  EXPECT_TRUE(data.empty());
+  EXPECT_EQ(error, "No media is loaded.");
 }
 
 TEST(VlcPlayerCore, CopyPixelsWithoutFrameReturnsFalse) {
@@ -144,6 +158,9 @@ TEST(VlcPlayerCore, DisposeIsIdempotentAndGuardsCommands) {
   EXPECT_FALSE(core->is_valid());
   EXPECT_EQ(core->Play(), "The vlc_player has been disposed.");
   EXPECT_EQ(core->SetVolume(100), "The vlc_player has been disposed.");
+  EXPECT_EQ(core->SetAudioDelay(1000), "The vlc_player has been disposed.");
+  EXPECT_EQ(core->SetSubtitleDelay(1000),
+            "The vlc_player has been disposed.");
   EXPECT_TRUE(core->GetAudioTracks().empty());
 }
 

@@ -40,6 +40,8 @@ struct VlcSnapshot {
   int64_t duration = 0;
   int volume = 100;
   double playback_speed = 1.0;
+  int64_t audio_delay = 0;
+  int64_t subtitle_delay = 0;
   bool is_ready = false;
   bool is_seekable = false;
   bool is_live = false;

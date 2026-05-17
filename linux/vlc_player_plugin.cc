@@ -289,6 +289,26 @@ class LinuxVlcPlayer {
     });
   }
 
+  std::string SetAudioDelay(int64_t microseconds) {
+    return RunAndSendSnapshot([this, microseconds] {
+      return core_->SetAudioDelay(microseconds);
+    });
+  }
+
+  std::string SetSubtitleDelay(int64_t microseconds) {
+    return RunAndSendSnapshot([this, microseconds] {
+      return core_->SetSubtitleDelay(microseconds);
+    });
+  }
+
+  std::vector<uint8_t> TakeSnapshot(uint32_t width,
+                                    uint32_t height,
+                                    std::string* error) {
+    std::vector<uint8_t> data = core_->TakeSnapshot(width, height, error);
+    SendSnapshot();
+    return data;
+  }
+
   FlValue* GetAudioTracks() {
     return TrackDescriptions(core_->GetAudioTracks());
   }
@@ -391,6 +411,10 @@ class LinuxVlcPlayer {
     fl_value_set_string_take(event, "volume", fl_value_new_int(snapshot.volume));
     fl_value_set_string_take(event, "playbackSpeed",
                              fl_value_new_float(snapshot.playback_speed));
+    fl_value_set_string_take(event, "audioDelay",
+                             fl_value_new_int(snapshot.audio_delay));
+    fl_value_set_string_take(event, "subtitleDelay",
+                             fl_value_new_int(snapshot.subtitle_delay));
     fl_value_set_string_take(event, "isReady",
                              fl_value_new_bool(snapshot.is_ready));
     fl_value_set_string_take(event, "isSeekable",
@@ -592,6 +616,41 @@ static FlMethodResponse* handle_method(VlcPlayerPlugin* self,
                             "A finite positive playback speed is required.");
     }
     error = player->SetPlaybackSpeed(speed);
+  } else if (strcmp(method, "setAudioDelay") == 0) {
+    int64_t delay = 0;
+    if (!ReadInt(arguments, "delay", &delay)) {
+      return error_response("invalid_args",
+                            "An audio delay value is required.");
+    }
+    error = player->SetAudioDelay(delay);
+  } else if (strcmp(method, "setSubtitleDelay") == 0) {
+    int64_t delay = 0;
+    if (!ReadInt(arguments, "delay", &delay)) {
+      return error_response("invalid_args",
+                            "A subtitle delay value is required.");
+    }
+    error = player->SetSubtitleDelay(delay);
+  } else if (strcmp(method, "takeSnapshot") == 0) {
+    int64_t width = 0;
+    int64_t height = 0;
+    if (ReadInt(arguments, "width", &width) && width <= 0) {
+      return error_response("invalid_args",
+                            "Snapshot dimensions must be positive.");
+    }
+    if (ReadInt(arguments, "height", &height) && height <= 0) {
+      return error_response("invalid_args",
+                            "Snapshot dimensions must be positive.");
+    }
+    std::string snapshot_error;
+    const std::vector<uint8_t> data = player->TakeSnapshot(
+        static_cast<uint32_t>(width), static_cast<uint32_t>(height),
+        &snapshot_error);
+    if (!snapshot_error.empty()) {
+      return error_response("snapshot_failed", snapshot_error);
+    }
+    g_autoptr(FlValue) result =
+        fl_value_new_uint8_list(data.data(), data.size());
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   } else if (strcmp(method, "getAudioTracks") == 0) {
     g_autoptr(FlValue) result = player->GetAudioTracks();
     return FL_METHOD_RESPONSE(fl_method_success_response_new(result));

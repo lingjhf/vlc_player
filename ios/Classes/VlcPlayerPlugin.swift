@@ -110,6 +110,34 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       }
       player.setPlaybackSpeed(speed)
       result(nil)
+    case "setAudioDelay":
+      guard let delay = Self.intValue(arguments["delay"]) else {
+        result(FlutterError(code: "invalid_args", message: "An audio delay value is required.", details: nil))
+        return
+      }
+      player.setAudioDelay(delay)
+      result(nil)
+    case "setSubtitleDelay":
+      guard let delay = Self.intValue(arguments["delay"]) else {
+        result(FlutterError(code: "invalid_args", message: "A subtitle delay value is required.", details: nil))
+        return
+      }
+      player.setSubtitleDelay(delay)
+      result(nil)
+    case "takeSnapshot":
+      let rawWidth = Self.intValue(arguments["width"])
+      let rawHeight = Self.intValue(arguments["height"])
+      if let rawWidth = rawWidth, rawWidth <= 0 {
+        result(FlutterError(code: "invalid_args", message: "Snapshot dimensions must be positive.", details: nil))
+        return
+      }
+      if let rawHeight = rawHeight, rawHeight <= 0 {
+        result(FlutterError(code: "invalid_args", message: "Snapshot dimensions must be positive.", details: nil))
+        return
+      }
+      let width = rawWidth ?? 0
+      let height = rawHeight ?? 0
+      player.takeSnapshot(width: width, height: height, result: result)
     case "getAudioTracks":
       result(player.getAudioTracks())
     case "setAudioTrack":
@@ -207,11 +235,13 @@ final class VlcPlayerViewFactory: NSObject, FlutterPlatformViewFactory {
     arguments args: Any?
   ) -> FlutterPlatformView {
     let options = (args as? [String: Any])?["options"] as? [String] ?? []
+    let fit = (args as? [String: Any])?["fit"] as? String ?? "contain"
     let platformView = VlcPlayerPlatformView(
       frame: frame,
       viewId: viewId,
       messenger: messenger,
-      options: options
+      options: options,
+      fit: fit
     )
     onCreate(viewId, platformView)
     return platformView
@@ -233,7 +263,8 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
     frame: CGRect,
     viewId: Int64,
     messenger: FlutterBinaryMessenger,
-    options: [String]
+    options: [String],
+    fit: String
   ) {
     uiView = VlcPlayerContainerView(frame: frame)
     mediaPlayer = VLCMediaPlayer(options: options)
@@ -241,7 +272,7 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
     super.init()
 
     uiView.backgroundColor = .black
-    uiView.contentMode = .scaleAspectFit
+    Self.applyFit(fit, to: uiView)
     mediaPlayer.drawable = uiView
     mediaPlayer.delegate = self
     eventChannel.setStreamHandler(eventHandler)
@@ -311,6 +342,47 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
   func setPlaybackSpeed(_ speed: Double) {
     mediaPlayer.rate = Float(speed)
     sendSnapshot()
+  }
+
+  func setAudioDelay(_ microseconds: Int) {
+    mediaPlayer.currentAudioPlaybackDelay = microseconds
+    sendSnapshot()
+  }
+
+  func setSubtitleDelay(_ microseconds: Int) {
+    mediaPlayer.currentVideoSubTitleDelay = microseconds
+    sendSnapshot()
+  }
+
+  func takeSnapshot(width: Int, height: Int, result: @escaping FlutterResult) {
+    guard mediaPlayer.media != nil else {
+      result(FlutterError(code: "snapshot_failed", message: "No media is loaded.", details: nil))
+      return
+    }
+
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(
+      "vlc_player_snapshot_\(UUID().uuidString).png"
+    )
+    try? FileManager.default.removeItem(at: url)
+    mediaPlayer.saveVideoSnapshot(at: url.path, withWidth: Int32(width), andHeight: Int32(height))
+
+    DispatchQueue.global(qos: .userInitiated).async {
+      for _ in 0..<40 {
+        if let data = try? Data(contentsOf: url), !data.isEmpty {
+          try? FileManager.default.removeItem(at: url)
+          DispatchQueue.main.async {
+            result(FlutterStandardTypedData(bytes: data))
+          }
+          return
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+      }
+
+      try? FileManager.default.removeItem(at: url)
+      DispatchQueue.main.async {
+        result(FlutterError(code: "snapshot_failed", message: "VLC did not produce snapshot image data.", details: nil))
+      }
+    }
   }
 
   func getAudioTracks() -> [[String: Any?]] {
@@ -411,6 +483,8 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
       "duration": duration,
       "volume": Int(mediaPlayer.audio?.volume ?? 0),
       "playbackSpeed": Double(mediaPlayer.rate),
+      "audioDelay": Int(mediaPlayer.currentAudioPlaybackDelay),
+      "subtitleDelay": Int(mediaPlayer.currentVideoSubTitleDelay),
       "isReady": Self.isReadyState(stateName),
       "isSeekable": isSeekable,
       "isLive": Self.isLiveState(stateName) && duration == 0 && !isSeekable,
@@ -439,6 +513,20 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
       return nil
     }
     return ["width": width, "height": height]
+  }
+
+  private static func applyFit(_ fit: String, to view: UIView) {
+    view.clipsToBounds = true
+    switch fit {
+    case "cover":
+      view.contentMode = .scaleAspectFill
+    case "fill":
+      view.contentMode = .scaleToFill
+    case "none":
+      view.contentMode = .center
+    default:
+      view.contentMode = .scaleAspectFit
+    }
   }
 
   private func trackDescriptions(indexes: [Any]?, names: [Any]?) -> [[String: Any?]] {
