@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.8.0 - 2026-05-18
+
+### Changed
+
+- Promoted the pre-1.0 stabilization work to the `0.8.0` milestone after the
+  API surface cleanup, public API regression coverage, internal controller
+  typing, native invocation consolidation, and local format compatibility
+  validation completed on `master`.
+- Kept the application-facing API unchanged from the latest `0.7.x`
+  stabilization builds.
+
 ## 0.7.25 - 2026-05-17
 
 ### Changed
