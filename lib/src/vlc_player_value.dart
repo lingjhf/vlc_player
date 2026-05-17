@@ -44,6 +44,8 @@ class VlcPlayerValue {
     this.duration = Duration.zero,
     this.volume = 100,
     this.playbackSpeed = 1,
+    this.audioDelay = Duration.zero,
+    this.subtitleDelay = Duration.zero,
     this.isReady = false,
     this.isSeekable = false,
     this.isLive = false,
@@ -70,6 +72,16 @@ class VlcPlayerValue {
 
   /// Current playback speed multiplier.
   final double playbackSpeed;
+
+  /// Current audio playback delay.
+  ///
+  /// Positive values delay audio; negative values play audio earlier.
+  final Duration audioDelay;
+
+  /// Current subtitle display delay.
+  ///
+  /// Positive values delay subtitles; negative values show subtitles earlier.
+  final Duration subtitleDelay;
 
   /// Whether the native player has reached a playable active or terminal state.
   final bool isReady;
@@ -112,6 +124,8 @@ class VlcPlayerValue {
         other.duration == duration &&
         other.volume == volume &&
         other.playbackSpeed == playbackSpeed &&
+        other.audioDelay == audioDelay &&
+        other.subtitleDelay == subtitleDelay &&
         other.isReady == isReady &&
         other.isSeekable == isSeekable &&
         other.isLive == isLive &&
@@ -128,6 +142,8 @@ class VlcPlayerValue {
     duration,
     volume,
     playbackSpeed,
+    audioDelay,
+    subtitleDelay,
     isReady,
     isSeekable,
     isLive,
@@ -147,6 +163,8 @@ class VlcPlayerValue {
     Duration? duration,
     int? volume,
     double? playbackSpeed,
+    Duration? audioDelay,
+    Duration? subtitleDelay,
     bool? isReady,
     bool? isSeekable,
     bool? isLive,
@@ -178,6 +196,8 @@ class VlcPlayerValue {
       duration: duration ?? this.duration,
       volume: volume ?? this.volume,
       playbackSpeed: playbackSpeed ?? this.playbackSpeed,
+      audioDelay: audioDelay ?? this.audioDelay,
+      subtitleDelay: subtitleDelay ?? this.subtitleDelay,
       isReady: isReady ?? this.isReady,
       isSeekable: isSeekable ?? this.isSeekable,
       isLive: isLive ?? this.isLive,
@@ -214,6 +234,8 @@ class VlcPlayerValue {
       duration: _durationFromMilliseconds(event['duration']),
       volume: _intValue(event['volume']),
       playbackSpeed: _doubleValue(event['playbackSpeed']),
+      audioDelay: _durationFromMicroseconds(event['audioDelay']),
+      subtitleDelay: _durationFromMicroseconds(event['subtitleDelay']),
       isReady: _boolValue(event['isReady']) ?? _isReadyState(state),
       isSeekable: _boolValue(event['isSeekable']),
       isLive: _boolValue(event['isLive']),
@@ -235,6 +257,13 @@ class VlcPlayerValue {
       return null;
     }
     return Duration(milliseconds: value.round());
+  }
+
+  static Duration? _durationFromMicroseconds(Object? value) {
+    if (value is! num || !value.isFinite) {
+      return null;
+    }
+    return Duration(microseconds: value.round());
   }
 
   static Size? _sizeFromMap(Object? value) {

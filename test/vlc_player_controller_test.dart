@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -839,6 +840,177 @@ void main() {
 
       controller.dispose();
     });
+
+    test('jumpTo loads the selected playlist item', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/three.mp4')),
+      ];
+
+      mockEventChannel(62);
+      await harness.attachController(controller, 62);
+      await controller.setPlaylist(sources);
+      calls.clear();
+
+      await controller.jumpTo(2, autoPlay: false);
+
+      expect(controller.playlistIndex, 2);
+      expect(controller.currentMediaSource, sources[2]);
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 62,
+        'uri': 'https://example.com/three.mp4',
+        'autoPlay': false,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('insert and append keep the current playlist item selected', () async {
+      final controller = VlcPlayerController();
+      final one = VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4'));
+      final two = VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4'));
+      final zero = VlcMediaSource(
+        uri: Uri.parse('https://example.com/zero.mp4'),
+      );
+      final three = VlcMediaSource(
+        uri: Uri.parse('https://example.com/three.mp4'),
+      );
+
+      await controller.setPlaylist(<VlcMediaSource>[one, two], initialIndex: 1);
+      await controller.insertIntoPlaylist(0, zero);
+      await controller.addToPlaylist(three);
+
+      expect(controller.playlist, <VlcMediaSource>[zero, one, two, three]);
+      expect(controller.playlistIndex, 2);
+      expect(controller.currentMediaSource, two);
+      expect(calls, isEmpty);
+
+      controller.dispose();
+    });
+
+    test('removeFromPlaylistAt updates or reloads the current item', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/three.mp4')),
+      ];
+
+      mockEventChannel(63);
+      await harness.attachController(controller, 63);
+      await controller.setPlaylist(sources, initialIndex: 1);
+      calls.clear();
+
+      await controller.removeFromPlaylistAt(0);
+      expect(controller.playlist, <VlcMediaSource>[sources[1], sources[2]]);
+      expect(controller.playlistIndex, 0);
+      expect(controller.currentMediaSource, sources[1]);
+      expect(calls, isEmpty);
+
+      await controller.removeFromPlaylistAt(0, autoPlay: false);
+      expect(controller.playlist, <VlcMediaSource>[sources[2]]);
+      expect(controller.playlistIndex, 0);
+      expect(controller.currentMediaSource, sources[2]);
+      expect(calls.single.method, 'setSource');
+      expect(calls.single.arguments, <String, Object?>{
+        'viewId': 63,
+        'uri': 'https://example.com/three.mp4',
+        'autoPlay': false,
+        'httpHeaders': <String, String>{},
+      });
+
+      controller.dispose();
+    });
+
+    test('removing the last playlist item stops and clears state', () async {
+      final controller = VlcPlayerController();
+      final source = VlcMediaSource(
+        uri: Uri.parse('https://example.com/one.mp4'),
+      );
+
+      mockEventChannel(64);
+      await harness.attachController(controller, 64);
+      await controller.setPlaylist(<VlcMediaSource>[source]);
+      calls.clear();
+
+      await controller.removeFromPlaylistAt(0);
+
+      expect(controller.playlist, isEmpty);
+      expect(controller.playlistIndex, isNull);
+      expect(controller.currentMediaSource, isNull);
+      expect(calls.single.method, 'stop');
+      expect(calls.single.arguments, <String, Object?>{'viewId': 64});
+
+      controller.dispose();
+    });
+
+    test(
+      'clearPlaylist is idempotent and stops only active playlists',
+      () async {
+        final controller = VlcPlayerController();
+        final source = VlcMediaSource(
+          uri: Uri.parse('https://example.com/one.mp4'),
+        );
+
+        mockEventChannel(65);
+        await harness.attachController(controller, 65);
+        await controller.clearPlaylist();
+        expect(calls, isEmpty);
+
+        await controller.setPlaylist(<VlcMediaSource>[source]);
+        calls.clear();
+        await controller.clearPlaylist();
+
+        expect(controller.playlist, isEmpty);
+        expect(controller.playlistIndex, isNull);
+        expect(controller.currentMediaSource, isNull);
+        expect(calls.single.method, 'stop');
+
+        controller.dispose();
+      },
+    );
+
+    test('shufflePlaylist is deterministic and keeps current source', () async {
+      final controller = VlcPlayerController();
+      final sources = <VlcMediaSource>[
+        VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/three.mp4')),
+        VlcMediaSource(uri: Uri.parse('https://example.com/four.mp4')),
+      ];
+
+      await controller.setPlaylist(sources, initialIndex: 2);
+      await controller.shufflePlaylist(seed: 42);
+
+      expect(controller.playlist, isNot(sources));
+      expect(controller.playlist.toSet(), sources.toSet());
+      expect(controller.currentMediaSource, sources[2]);
+      expect(controller.playlist[controller.playlistIndex!], sources[2]);
+
+      controller.dispose();
+    });
+
+    test('playlist mutations require an active playlist', () async {
+      final controller = VlcPlayerController();
+      final source = VlcMediaSource(
+        uri: Uri.parse('https://example.com/one.mp4'),
+      );
+
+      await expectLater(controller.jumpTo(0), throwsStateError);
+      await expectLater(controller.addToPlaylist(source), throwsStateError);
+      await expectLater(
+        controller.insertIntoPlaylist(0, source),
+        throwsStateError,
+      );
+      await expectLater(controller.removeFromPlaylistAt(0), throwsStateError);
+      await expectLater(controller.shufflePlaylist(seed: 1), throwsStateError);
+
+      controller.dispose();
+    });
   });
 
   group('platform view lifecycle', () {
@@ -1092,6 +1264,8 @@ void main() {
       await controller.setVolume(250);
       await controller.setVolume(-25);
       await controller.setPlaybackSpeed(1.5);
+      await controller.setAudioDelay(const Duration(milliseconds: -120));
+      await controller.setSubtitleDelay(const Duration(milliseconds: 250));
 
       expect(calls.map((call) => call.method), <String>[
         'play',
@@ -1099,6 +1273,8 @@ void main() {
         'setVolume',
         'setVolume',
         'setPlaybackSpeed',
+        'setAudioDelay',
+        'setSubtitleDelay',
       ]);
       expect(calls[0].arguments, <String, Object?>{'viewId': 12});
       expect(calls[1].arguments, <String, Object?>{
@@ -1111,6 +1287,14 @@ void main() {
       });
       expect(calls[3].arguments, <String, Object?>{'viewId': 12, 'volume': 0});
       expect(calls[4].arguments, <String, Object?>{'viewId': 12, 'speed': 1.5});
+      expect(calls[5].arguments, <String, Object?>{
+        'viewId': 12,
+        'delay': -120000,
+      });
+      expect(calls[6].arguments, <String, Object?>{
+        'viewId': 12,
+        'delay': 250000,
+      });
 
       controller.dispose();
     });
@@ -1125,6 +1309,7 @@ void main() {
       expect(controller.getSubtitleTracks, throwsStateError);
       expect(controller.disableSubtitle, throwsStateError);
       expect(controller.getMediaInfo, throwsStateError);
+      expect(controller.takeSnapshot, throwsStateError);
 
       controller.dispose();
     });
@@ -1232,6 +1417,45 @@ void main() {
 
       controller.dispose();
     });
+
+    test(
+      'takeSnapshot returns native PNG bytes and validates dimensions',
+      () async {
+        final controller = VlcPlayerController();
+        mockEventChannel(18);
+        await harness.attachController(controller, 18);
+        final pngBytes = Uint8List.fromList(<int>[137, 80, 78, 71]);
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              return pngBytes;
+            });
+
+        final snapshot = await controller.takeSnapshot(width: 320, height: 180);
+
+        expect(snapshot, pngBytes);
+        expect(calls.single.method, 'takeSnapshot');
+        expect(calls.single.arguments, <String, Object?>{
+          'viewId': 18,
+          'width': 320,
+          'height': 180,
+        });
+        calls.clear();
+        await expectLater(
+          controller.takeSnapshot(width: 0),
+          throwsArgumentError,
+        );
+        await expectLater(
+          controller.takeSnapshot(height: -1),
+          throwsArgumentError,
+        );
+        expect(calls, isEmpty);
+
+        controller.dispose();
+      },
+    );
   });
 
   group('event errors', () {

@@ -13,6 +13,8 @@ void main() {
       expect(value.duration, Duration.zero);
       expect(value.volume, 100);
       expect(value.playbackSpeed, 1);
+      expect(value.audioDelay, Duration.zero);
+      expect(value.subtitleDelay, Duration.zero);
       expect(value.isReady, isFalse);
       expect(value.isSeekable, isFalse);
       expect(value.isLive, isFalse);
@@ -34,6 +36,8 @@ void main() {
         duration: Duration(seconds: 10),
         volume: 80,
         playbackSpeed: 1.25,
+        audioDelay: Duration(milliseconds: -120),
+        subtitleDelay: Duration(milliseconds: 250),
         isReady: true,
         isSeekable: true,
         isLive: false,
@@ -48,6 +52,8 @@ void main() {
         duration: Duration(seconds: 10),
         volume: 80,
         playbackSpeed: 1.25,
+        audioDelay: Duration(milliseconds: -120),
+        subtitleDelay: Duration(milliseconds: 250),
         isReady: true,
         isSeekable: true,
         isLive: false,
@@ -72,6 +78,8 @@ void main() {
         'duration': 10000,
         'volume': 80,
         'playbackSpeed': 1.25,
+        'audioDelay': -120000,
+        'subtitleDelay': 250000,
         'isReady': false,
         'isSeekable': true,
         'isLive': false,
@@ -84,6 +92,8 @@ void main() {
       expect(value.duration, const Duration(seconds: 10));
       expect(value.volume, 80);
       expect(value.playbackSpeed, 1.25);
+      expect(value.audioDelay, const Duration(milliseconds: -120));
+      expect(value.subtitleDelay, const Duration(milliseconds: 250));
       expect(value.isReady, isFalse);
       expect(value.isSeekable, isTrue);
       expect(value.isLive, isFalse);
@@ -98,6 +108,8 @@ void main() {
         'duration': 10000.4,
         'volume': 80.6,
         'playbackSpeed': 2,
+        'audioDelay': -999.6,
+        'subtitleDelay': 1000.4,
         'videoSize': <String, Object?>{'width': 1920.5, 'height': 1080},
       }, const VlcPlayerValue());
 
@@ -105,6 +117,8 @@ void main() {
       expect(value.duration, const Duration(milliseconds: 10000));
       expect(value.volume, 81);
       expect(value.playbackSpeed, 2.0);
+      expect(value.audioDelay, const Duration(microseconds: -1000));
+      expect(value.subtitleDelay, const Duration(microseconds: 1000));
       expect(value.videoSize, const Size(1920.5, 1080));
     });
 
@@ -115,6 +129,8 @@ void main() {
         duration: Duration(seconds: 30),
         volume: 55,
         playbackSpeed: 1.5,
+        audioDelay: Duration(milliseconds: -20),
+        subtitleDelay: Duration(milliseconds: 30),
         isReady: true,
         isSeekable: true,
         isLive: true,
@@ -126,6 +142,8 @@ void main() {
         'duration': double.nan,
         'volume': '80',
         'playbackSpeed': Object(),
+        'audioDelay': Object(),
+        'subtitleDelay': double.nan,
         'isReady': 'true',
         'isSeekable': 1,
         'isLive': 'false',
@@ -138,6 +156,8 @@ void main() {
       expect(value.duration, const Duration(seconds: 30));
       expect(value.volume, 55);
       expect(value.playbackSpeed, 1.5);
+      expect(value.audioDelay, const Duration(milliseconds: -20));
+      expect(value.subtitleDelay, const Duration(milliseconds: 30));
       expect(value.isReady, isTrue);
       expect(value.isSeekable, isTrue);
       expect(value.isLive, isTrue);

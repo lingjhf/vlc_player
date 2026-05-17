@@ -115,4 +115,50 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });
+
+  testWidgets('fits texture players with the configured video fit', (
+    WidgetTester tester,
+  ) async {
+    await runAsWindows(() async {
+      final controller = VlcPlayerController();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methodChannel, (call) async {
+            if (call.method == 'create') {
+              mockEventChannel(8);
+              return <String, Object?>{'viewId': 8, 'textureId': 43};
+            }
+            return null;
+          });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SizedBox(
+            width: 320,
+            height: 180,
+            child: VlcPlayer(controller: controller, fit: VlcVideoFit.cover),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      const channel = EventChannel('vlc_player/events/8');
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'playing',
+              'videoSize': <String, Object?>{'width': 640, 'height': 360},
+            }),
+            null,
+          );
+      await tester.pump();
+
+      final fittedBox = tester.widget<FittedBox>(find.byType(FittedBox));
+      expect(fittedBox.fit, BoxFit.cover);
+      expect(find.byType(Texture), findsOneWidget);
+
+      controller.dispose();
+      await tester.pumpWidget(const SizedBox.shrink());
+    });
+  });
 }

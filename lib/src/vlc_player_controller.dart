@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -116,6 +118,35 @@ abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// [VlcPlaylistLoopMode.none]. Throws [StateError] when no playlist is active.
   Future<bool> previous({bool autoPlay = true});
 
+  /// Loads the playlist item at [index].
+  ///
+  /// Throws [StateError] when no playlist is active.
+  Future<void> jumpTo(int index, {bool autoPlay = true});
+
+  /// Appends [source] to the active playlist.
+  ///
+  /// Throws [StateError] when no playlist is active.
+  Future<void> addToPlaylist(VlcMediaSource source);
+
+  /// Inserts [source] into the active playlist at [index].
+  ///
+  /// Throws [StateError] when no playlist is active.
+  Future<void> insertIntoPlaylist(int index, VlcMediaSource source);
+
+  /// Removes the playlist item at [index].
+  ///
+  /// Removing the current item loads the next valid item. If the removed item
+  /// was the only item, playback stops and the playlist is cleared.
+  Future<void> removeFromPlaylistAt(int index, {bool autoPlay = true});
+
+  /// Clears the active playlist and stops playback when a player is attached.
+  Future<void> clearPlaylist();
+
+  /// Shuffles the active playlist.
+  ///
+  /// When [seed] is provided, the shuffle order is deterministic.
+  Future<void> shufflePlaylist({int? seed});
+
   /// Starts or resumes playback.
   Future<void> play();
 
@@ -139,6 +170,21 @@ abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   ///
   /// [speed] must be finite and greater than zero. `1.0` is normal speed.
   Future<void> setPlaybackSpeed(double speed);
+
+  /// Sets the audio playback delay.
+  ///
+  /// Positive values delay audio; negative values play audio earlier.
+  Future<void> setAudioDelay(Duration delay);
+
+  /// Sets the subtitle display delay.
+  ///
+  /// Positive values delay subtitles; negative values show subtitles earlier.
+  Future<void> setSubtitleDelay(Duration delay);
+
+  /// Captures the current video frame as PNG bytes.
+  ///
+  /// [width] and [height] must be positive when provided.
+  Future<Uint8List> takeSnapshot({int? width, int? height});
 
   /// Returns selectable audio tracks for the current media.
   Future<List<VlcTrackDescription>> getAudioTracks();
@@ -408,12 +454,104 @@ class _VlcPlayerController extends VlcPlayerController
     return _moveInPlaylist(-1, autoPlay: autoPlay);
   }
 
-  Future<bool> _moveInPlaylist(int delta, {required bool autoPlay}) async {
-    _ensureNotDisposed();
-    final index = _playlistIndex;
-    if (index == null) {
-      throw StateError('No playlist has been set.');
+  @override
+  Future<void> jumpTo(int index, {bool autoPlay = true}) async {
+    _ensureActivePlaylist();
+    RangeError.checkValidIndex(index, _playlist, 'index');
+    if (index == _playlistIndex) {
+      return;
     }
+    await _loadPlaylistIndex(index, autoPlay: autoPlay);
+  }
+
+  @override
+  Future<void> addToPlaylist(VlcMediaSource source) {
+    return insertIntoPlaylist(_playlist.length, source);
+  }
+
+  @override
+  Future<void> insertIntoPlaylist(int index, VlcMediaSource source) async {
+    _ensureActivePlaylist();
+    RangeError.checkValueInInterval(index, 0, _playlist.length, 'index');
+    final currentIndex = _playlistIndex!;
+    final nextPlaylist = <VlcMediaSource>[..._playlist]..insert(index, source);
+    _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
+    if (index <= currentIndex) {
+      _playlistIndex = currentIndex + 1;
+    }
+  }
+
+  @override
+  Future<void> removeFromPlaylistAt(int index, {bool autoPlay = true}) async {
+    _ensureActivePlaylist();
+    RangeError.checkValidIndex(index, _playlist, 'index');
+
+    final previousPlaylist = _playlist;
+    final previousPlaylistIndex = _playlistIndex;
+    final previousMediaSource = _pendingMediaSource;
+    final previousAutoPlay = _pendingAutoPlay;
+    final currentIndex = previousPlaylistIndex!;
+    final nextPlaylist = <VlcMediaSource>[..._playlist]..removeAt(index);
+
+    if (nextPlaylist.isEmpty) {
+      await _stopIfAttached();
+      _clearPlaylist();
+      _pendingMediaSource = null;
+      _pendingAutoPlay = false;
+      return;
+    }
+
+    _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
+    if (index < currentIndex) {
+      _playlistIndex = currentIndex - 1;
+      return;
+    }
+    if (index > currentIndex) {
+      _playlistIndex = currentIndex;
+      return;
+    }
+
+    final nextIndex = math.min(index, nextPlaylist.length - 1);
+    _playlistIndex = nextIndex;
+    try {
+      await _setMedia(_playlist[nextIndex], autoPlay: autoPlay);
+    } catch (_) {
+      _playlist = previousPlaylist;
+      _playlistIndex = previousPlaylistIndex;
+      _pendingMediaSource = previousMediaSource;
+      _pendingAutoPlay = previousAutoPlay;
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> clearPlaylist() async {
+    _ensureNotDisposed();
+    if (_playlistIndex == null) {
+      return;
+    }
+    await _stopIfAttached();
+    _clearPlaylist();
+    _pendingMediaSource = null;
+    _pendingAutoPlay = false;
+  }
+
+  @override
+  Future<void> shufflePlaylist({int? seed}) async {
+    _ensureActivePlaylist();
+    final currentSource = currentMediaSource;
+    final random = seed == null ? math.Random() : math.Random(seed);
+    final nextPlaylist = <VlcMediaSource>[..._playlist]..shuffle(random);
+    _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
+    _playlistIndex = currentSource == null
+        ? 0
+        : _playlist.indexOf(currentSource).clamp(0, _playlist.length - 1)
+              as int;
+  }
+
+  Future<bool> _moveInPlaylist(int delta, {required bool autoPlay}) async {
+    _ensureActivePlaylist();
+    final index = _playlistIndex!;
 
     final nextIndex = index + delta;
     if (nextIndex < 0 || nextIndex >= _playlist.length) {
@@ -478,6 +616,13 @@ class _VlcPlayerController extends VlcPlayerController
     _playlistLoopMode = VlcPlaylistLoopMode.none;
   }
 
+  void _ensureActivePlaylist() {
+    _ensureNotDisposed();
+    if (_playlistIndex == null) {
+      throw StateError('No playlist has been set.');
+    }
+  }
+
   @override
   Future<void> play() => _invoke('play');
 
@@ -514,6 +659,38 @@ class _VlcPlayerController extends VlcPlayerController
       );
     }
     return _invoke('setPlaybackSpeed', <String, Object?>{'speed': speed});
+  }
+
+  @override
+  Future<void> setAudioDelay(Duration delay) {
+    return _invoke('setAudioDelay', <String, Object?>{
+      'delay': delay.inMicroseconds,
+    });
+  }
+
+  @override
+  Future<void> setSubtitleDelay(Duration delay) {
+    return _invoke('setSubtitleDelay', <String, Object?>{
+      'delay': delay.inMicroseconds,
+    });
+  }
+
+  @override
+  Future<Uint8List> takeSnapshot({int? width, int? height}) async {
+    if (width != null && width <= 0) {
+      throw ArgumentError.value(width, 'width', 'Must be positive.');
+    }
+    if (height != null && height <= 0) {
+      throw ArgumentError.value(height, 'height', 'Must be positive.');
+    }
+    final data = await _invokeFor<Uint8List>('takeSnapshot', <String, Object?>{
+      if (width != null) 'width': width,
+      if (height != null) 'height': height,
+    });
+    if (data == null || data.isEmpty) {
+      throw StateError('vlc_player snapshot returned no image data.');
+    }
+    return data;
   }
 
   @override
@@ -568,6 +745,13 @@ class _VlcPlayerController extends VlcPlayerController
 
   Future<T?> _invokeFor<T>(String method, [Map<String, Object?>? arguments]) {
     return _invokeNative<T>(method, _attachedArguments(arguments));
+  }
+
+  Future<void> _stopIfAttached() {
+    if (_viewId == null) {
+      return Future<void>.value();
+    }
+    return _invoke('stop');
   }
 
   Map<String, Object?> _attachedArguments([Map<String, Object?>? arguments]) {
@@ -738,6 +922,8 @@ class _VlcPlayerController extends VlcPlayerController
     return previousValue.state == nextValue.state &&
         previousValue.volume == nextValue.volume &&
         previousValue.playbackSpeed == nextValue.playbackSpeed &&
+        previousValue.audioDelay == nextValue.audioDelay &&
+        previousValue.subtitleDelay == nextValue.subtitleDelay &&
         previousValue.isReady == nextValue.isReady &&
         previousValue.isSeekable == nextValue.isSeekable &&
         previousValue.isLive == nextValue.isLive &&
