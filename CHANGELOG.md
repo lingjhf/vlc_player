@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 2.0.0 - 2026-05-18
+
+### Added
+
+- Added `VlcPlayerController.getMediaStats()` and `VlcMediaStats` for
+  best-effort LibVLC media read, demux, decoder, output, and stream-output
+  counters.
+
+### Changed
+
+- Documented the `2.x` API stability policy and clarified the migration path
+  from older stable releases.
+- Reduced duplicate Linux and Windows player events before they reach Dart.
+- Expanded widget and native regression coverage for platform-view creation,
+  texture controller replacement, and desktop snapshot equality.
+
+### Breaking
+
+- Android now requires `minSdk 29` / Android 10 or newer.
+
 ## 1.0.0 - 2026-05-18
 
 ### Added

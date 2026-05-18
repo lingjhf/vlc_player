@@ -398,6 +398,41 @@ VlcMediaInfo VlcPlayerCore::GetMediaInfo() {
   return info;
 }
 
+VlcMediaStats VlcPlayerCore::GetMediaStats() {
+  VlcMediaStats result;
+  if (!is_valid()) {
+    return result;
+  }
+
+  auto media = player_->media();
+  if (media == nullptr) {
+    return result;
+  }
+
+  libvlc_media_stats_t stats{};
+  if (!media->stats(&stats)) {
+    return result;
+  }
+
+  result.available = true;
+  result.read_bytes = stats.i_read_bytes;
+  result.input_bitrate = stats.f_input_bitrate;
+  result.demux_read_bytes = stats.i_demux_read_bytes;
+  result.demux_bitrate = stats.f_demux_bitrate;
+  result.demux_corrupted = stats.i_demux_corrupted;
+  result.demux_discontinuity = stats.i_demux_discontinuity;
+  result.decoded_video = stats.i_decoded_video;
+  result.decoded_audio = stats.i_decoded_audio;
+  result.displayed_pictures = stats.i_displayed_pictures;
+  result.lost_pictures = stats.i_lost_pictures;
+  result.played_audio_buffers = stats.i_played_abuffers;
+  result.lost_audio_buffers = stats.i_lost_abuffers;
+  result.sent_packets = stats.i_sent_packets;
+  result.sent_bytes = stats.i_sent_bytes;
+  result.send_bitrate = stats.f_send_bitrate;
+  return result;
+}
+
 VlcSnapshot VlcPlayerCore::Snapshot() {
   VlcSnapshot snapshot;
   if (!is_valid()) {

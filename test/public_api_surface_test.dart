@@ -9,6 +9,7 @@ void main() {
     expect(library, contains("export 'src/vlc_player_controller.dart';"));
     expect(library, contains("export 'src/vlc_player.dart';"));
     expect(library, contains("export 'src/vlc_media_source.dart';"));
+    expect(library, contains("export 'src/vlc_media_stats.dart';"));
     expect(library, contains("export 'src/vlc_player_value.dart';"));
     expect(library, contains("export 'src/vlc_media_info.dart';"));
     expect(library, contains("export 'src/vlc_player_error.dart';"));
@@ -46,6 +47,10 @@ void main() {
 
       expect(controllerClass, contains('Future<void> setMedia('));
       expect(controllerClass, contains('Future<void> setPlaylist('));
+      expect(
+        controllerClass,
+        contains('Future<VlcMediaStats> getMediaStats()'),
+      );
       expect(controllerClass, isNot(contains('setSource(')));
       expect(controllerClass, isNot(contains('MethodChannel')));
       expect(controllerClass, isNot(contains('viewType')));
@@ -64,7 +69,7 @@ void main() {
     );
 
     expect(readme, contains('## API stability'));
-    expect(readme, contains('## Migrating from 0.8.x'));
+    expect(readme, contains('## Migrating from 1.x or 0.8.x'));
     expect(readme, contains('## Migrating from 0.7.21 or earlier'));
     expect(controllerReference, contains('mediaSource'));
     expect(controllerReference, contains('setMedia(VlcMediaSource source'));

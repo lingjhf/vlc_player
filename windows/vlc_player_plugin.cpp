@@ -252,6 +252,33 @@ EncodableMap MediaInfo(const VlcMediaInfo &info) {
   return result;
 }
 
+EncodableMap MediaStats(const VlcMediaStats &stats) {
+  EncodableMap result;
+  result[EncodableValue("available")] = EncodableValue(stats.available);
+  result[EncodableValue("readBytes")] = EncodableValue(stats.read_bytes);
+  result[EncodableValue("inputBitrate")] = EncodableValue(stats.input_bitrate);
+  result[EncodableValue("demuxReadBytes")] =
+      EncodableValue(stats.demux_read_bytes);
+  result[EncodableValue("demuxBitrate")] = EncodableValue(stats.demux_bitrate);
+  result[EncodableValue("demuxCorrupted")] =
+      EncodableValue(stats.demux_corrupted);
+  result[EncodableValue("demuxDiscontinuity")] =
+      EncodableValue(stats.demux_discontinuity);
+  result[EncodableValue("decodedVideo")] = EncodableValue(stats.decoded_video);
+  result[EncodableValue("decodedAudio")] = EncodableValue(stats.decoded_audio);
+  result[EncodableValue("displayedPictures")] =
+      EncodableValue(stats.displayed_pictures);
+  result[EncodableValue("lostPictures")] = EncodableValue(stats.lost_pictures);
+  result[EncodableValue("playedAudioBuffers")] =
+      EncodableValue(stats.played_audio_buffers);
+  result[EncodableValue("lostAudioBuffers")] =
+      EncodableValue(stats.lost_audio_buffers);
+  result[EncodableValue("sentPackets")] = EncodableValue(stats.sent_packets);
+  result[EncodableValue("sentBytes")] = EncodableValue(stats.sent_bytes);
+  result[EncodableValue("sendBitrate")] = EncodableValue(stats.send_bitrate);
+  return result;
+}
+
 }  // namespace
 
 class WindowsVlcPlayer {
@@ -274,7 +301,7 @@ class WindowsVlcPlayer {
                 std::lock_guard<std::mutex> lock(event_mutex_);
                 event_sink_ = std::move(events);
               }
-              SendSnapshot();
+              SendSnapshot(false, true);
               return nullptr;
             },
             [this](const EncodableValue *arguments)
@@ -396,6 +423,7 @@ class WindowsVlcPlayer {
     return core_->AddSubtitle(uri);
   }
   EncodableMap GetMediaInfo() { return MediaInfo(core_->GetMediaInfo()); }
+  EncodableMap GetMediaStats() { return MediaStats(core_->GetMediaStats()); }
 
   void Dispose() {
     if (disposed_.exchange(true)) {
@@ -450,12 +478,30 @@ class WindowsVlcPlayer {
     return &pixel_buffer_;
   }
 
-  void SendSnapshot(bool lock_messenger = false) {
+  void SendSnapshot(bool lock_messenger = false, bool force = false) {
     if (disposed_.load() || core_ == nullptr) {
       return;
     }
+    {
+      std::lock_guard<std::mutex> lock(event_mutex_);
+      if (!event_sink_) {
+        return;
+      }
+    }
 
     const VlcSnapshot snapshot = core_->Snapshot();
+
+    std::lock_guard<std::mutex> lock(event_mutex_);
+    if (!event_sink_) {
+      return;
+    }
+    if (!force && has_last_sent_snapshot_ &&
+        snapshot == last_sent_snapshot_) {
+      return;
+    }
+    last_sent_snapshot_ = snapshot;
+    has_last_sent_snapshot_ = true;
+
     EncodableMap event;
     event[EncodableValue("state")] = EncodableValue(snapshot.state);
     event[EncodableValue("position")] = EncodableValue(snapshot.position);
@@ -490,18 +536,15 @@ class WindowsVlcPlayer {
           EncodableValue(snapshot.error_description);
     }
 
-    std::lock_guard<std::mutex> lock(event_mutex_);
-    if (event_sink_) {
-      if (lock_messenger && messenger_ref_ != nullptr) {
-        FlutterDesktopMessengerLock(messenger_ref_);
-        if (FlutterDesktopMessengerIsAvailable(messenger_ref_)) {
-          event_sink_->Success(EncodableValue(event));
-        }
-        FlutterDesktopMessengerUnlock(messenger_ref_);
-        return;
+    if (lock_messenger && messenger_ref_ != nullptr) {
+      FlutterDesktopMessengerLock(messenger_ref_);
+      if (FlutterDesktopMessengerIsAvailable(messenger_ref_)) {
+        event_sink_->Success(EncodableValue(event));
       }
-      event_sink_->Success(EncodableValue(event));
+      FlutterDesktopMessengerUnlock(messenger_ref_);
+      return;
     }
+    event_sink_->Success(EncodableValue(event));
   }
 
   flutter::TextureRegistrar *texture_registrar_;
@@ -509,6 +552,8 @@ class WindowsVlcPlayer {
   flutter::EventChannel<EncodableValue> event_channel_;
   std::unique_ptr<flutter::EventSink<EncodableValue>> event_sink_;
   std::mutex event_mutex_;
+  bool has_last_sent_snapshot_ = false;
+  VlcSnapshot last_sent_snapshot_;
 
   std::unique_ptr<VlcPlayerCore> core_;
   std::string init_error_;
@@ -739,6 +784,9 @@ void VlcPlayerPlugin::HandleMethodCall(
     }
   } else if (method_call.method_name() == "getMediaInfo") {
     result->Success(EncodableValue(player->GetMediaInfo()));
+    return;
+  } else if (method_call.method_name() == "getMediaStats") {
+    result->Success(EncodableValue(player->GetMediaStats()));
     return;
   } else {
     result->NotImplemented();

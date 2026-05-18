@@ -4,7 +4,8 @@ A Flutter plugin for video playback using VLC.
 
 `vlc_player` creates a native VLC-backed video view and exposes a Dart
 controller for loading media, controlling playback, selecting tracks, handling
-subtitles, reading playback state, and capturing snapshots.
+subtitles, reading playback state and media statistics, and capturing
+snapshots.
 
 ## Supported platforms
 
@@ -25,7 +26,7 @@ Add the package to your app:
 
 ```yaml
 dependencies:
-  vlc_player: ^1.0.0
+  vlc_player: ^2.0.0
 ```
 
 Then run:
@@ -43,7 +44,7 @@ and source components that app distributors need to account for.
 
 ### Android
 
-Android apps must use `minSdk 26` or newer.
+Android apps must use `minSdk 29` or newer.
 
 Network playback requires internet access. The plugin manifest declares:
 
@@ -254,6 +255,11 @@ await controller.disableSubtitle();
 
 final info = await controller.getMediaInfo();
 debugPrint('duration=${info.duration}');
+
+final stats = await controller.getMediaStats();
+if (stats.isAvailable) {
+  debugPrint('decoded video blocks=${stats.decodedVideo}');
+}
 ```
 
 Track selection methods use native VLC track ids returned by
@@ -375,6 +381,7 @@ Track, subtitle, and media information methods:
 - `disableSubtitle()`
 - `addSubtitle(Uri uri)`
 - `getMediaInfo()`
+- `getMediaStats()`
 
 `setVolume()` clamps values to VLC's `0..200` range. `seekTo()` requires a
 non-negative position. `setPlaybackSpeed()` requires a finite value greater
@@ -455,7 +462,7 @@ Possible playlist loop values:
 - `loopOne`
 - `loopAll`
 
-### Track and media information
+### Track, media information, and media statistics
 
 `getAudioTracks()` and `getSubtitleTracks()` return
 `VlcTrackDescription` objects:
@@ -475,6 +482,20 @@ Possible playlist loop values:
 `height`, `channels`, and `sampleRate`. These values are best-effort because
 containers and streams do not always expose every field.
 
+`getMediaStats()` returns `VlcMediaStats`:
+
+- `isAvailable`: whether VLC reported statistics for the current media.
+- `readBytes`, `inputBitrate`: current input module counters.
+- `demuxReadBytes`, `demuxBitrate`, `demuxCorrupted`,
+  `demuxDiscontinuity`: current demux counters.
+- `decodedVideo`, `decodedAudio`: decoded block counters.
+- `displayedPictures`, `lostPictures`: video output counters.
+- `playedAudioBuffers`, `lostAudioBuffers`: audio output counters.
+- `sentPackets`, `sentBytes`, `sendBitrate`: stream-output counters.
+
+When no media is loaded or VLC cannot provide statistics, `isAvailable` is
+`false` and the numeric values are zero.
+
 ### Errors
 
 Native command failures are exposed as `VlcPlayerException`, which wraps a
@@ -492,13 +513,25 @@ Common error codes are available in `VlcPlayerErrorCode`, including
 `trackNotFound`, `addSubtitleFailed`, `playbackError`, `disposed`, and
 `eventChannelError`.
 
-## Migration notes
+## API stability
 
-The `1.x` line follows Semantic Versioning. Backward-compatible additions use
+The `2.x` line follows Semantic Versioning. Backward-compatible additions use
 minor versions, fixes use patch versions, and breaking API, platform, or
 behavior changes use major versions.
 
-Version `1.0.0` requires Android `minSdk 26` or newer.
+Native view attachment, texture creation, method channels, platform view type
+strings, and generated platform registration details are implementation
+internals. Applications should import only `package:vlc_player/vlc_player.dart`
+and use the public types documented above.
+
+## Migrating from 1.x or 0.8.x
+
+Version `2.0.0` requires Android `minSdk 29` or newer.
+
+The Dart-facing API remains backward compatible, but Android apps that still
+target a lower minimum SDK must raise it before upgrading.
+
+## Migrating from 0.7.21 or earlier
 
 For apps migrating from older releases that used `source`, `httpHeaders`, or
 `setSource()`, use `VlcMediaSource` and `setMedia()` instead:

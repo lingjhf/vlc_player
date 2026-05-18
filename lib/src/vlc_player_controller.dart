@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 
 import 'vlc_media_info.dart';
 import 'vlc_media_source.dart';
+import 'vlc_media_stats.dart';
 import 'vlc_player_controller_internals.dart';
 import 'vlc_player_error.dart';
 import 'vlc_player_value.dart';
@@ -211,6 +212,9 @@ abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
 
   /// Returns metadata and discovered track details for the current media.
   Future<VlcMediaInfo> getMediaInfo();
+
+  /// Returns runtime statistics for the current media session.
+  Future<VlcMediaStats> getMediaStats();
 }
 
 const MethodChannel _methodChannel = MethodChannel('vlc_player');
@@ -738,6 +742,12 @@ class _VlcPlayerController extends VlcPlayerController
   Future<VlcMediaInfo> getMediaInfo() async {
     final info = await _invokeFor<Map<Object?, Object?>>('getMediaInfo');
     return VlcMediaInfo.fromMap(info ?? const <Object?, Object?>{});
+  }
+
+  @override
+  Future<VlcMediaStats> getMediaStats() async {
+    final stats = await _invokeFor<Map<Object?, Object?>>('getMediaStats');
+    return VlcMediaStats.fromMap(stats ?? const <Object?, Object?>{});
   }
 
   Future<void> _invoke(String method, [Map<String, Object?>? arguments]) {

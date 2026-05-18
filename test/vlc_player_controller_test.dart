@@ -1308,6 +1308,7 @@ void main() {
       expect(controller.getSubtitleTracks, throwsStateError);
       expect(controller.disableSubtitle, throwsStateError);
       expect(controller.getMediaInfo, throwsStateError);
+      expect(controller.getMediaStats, throwsStateError);
       expect(controller.takeSnapshot, throwsStateError);
 
       controller.dispose();
@@ -1769,6 +1770,71 @@ void main() {
 
       expect(calls.single.method, 'getMediaInfo');
       expect(info, const VlcMediaInfo());
+
+      controller.dispose();
+    });
+
+    test('gets media stats from native player', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(41);
+      await harness.attachController(controller, 41);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            return <Object?, Object?>{
+              'available': true,
+              'readBytes': 1024,
+              'inputBitrate': 1.25,
+              'demuxReadBytes': 2048,
+              'demuxBitrate': 2.5,
+              'decodedVideo': 3,
+              'decodedAudio': 4,
+              'displayedPictures': 5,
+              'lostPictures': 1,
+              'playedAudioBuffers': 6,
+              'lostAudioBuffers': 2,
+            };
+          });
+
+      final stats = await controller.getMediaStats();
+
+      expect(calls.single.method, 'getMediaStats');
+      expect(calls.single.arguments, <String, Object?>{'viewId': 41});
+      expect(stats.isAvailable, isTrue);
+      expect(stats.readBytes, 1024);
+      expect(stats.inputBitrate, 1.25);
+      expect(stats.demuxReadBytes, 2048);
+      expect(stats.demuxBitrate, 2.5);
+      expect(stats.decodedVideo, 3);
+      expect(stats.decodedAudio, 4);
+      expect(stats.displayedPictures, 5);
+      expect(stats.lostPictures, 1);
+      expect(stats.playedAudioBuffers, 6);
+      expect(stats.lostAudioBuffers, 2);
+
+      controller.dispose();
+    });
+
+    test('missing media stats payload returns unavailable stats', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(42);
+      await harness.attachController(controller, 42);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            return null;
+          });
+
+      final stats = await controller.getMediaStats();
+
+      expect(calls.single.method, 'getMediaStats');
+      expect(stats, const VlcMediaStats());
 
       controller.dispose();
     });

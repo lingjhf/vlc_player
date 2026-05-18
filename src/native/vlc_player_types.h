@@ -34,6 +34,25 @@ struct VlcMediaInfo {
   std::vector<VlcMediaTrackInfo> subtitle_tracks;
 };
 
+struct VlcMediaStats {
+  bool available = false;
+  int64_t read_bytes = 0;
+  double input_bitrate = 0.0;
+  int64_t demux_read_bytes = 0;
+  double demux_bitrate = 0.0;
+  int64_t demux_corrupted = 0;
+  int64_t demux_discontinuity = 0;
+  int64_t decoded_video = 0;
+  int64_t decoded_audio = 0;
+  int64_t displayed_pictures = 0;
+  int64_t lost_pictures = 0;
+  int64_t played_audio_buffers = 0;
+  int64_t lost_audio_buffers = 0;
+  int64_t sent_packets = 0;
+  int64_t sent_bytes = 0;
+  double send_bitrate = 0.0;
+};
+
 struct VlcSnapshot {
   std::string state = "idle";
   int64_t position = 0;
@@ -51,6 +70,24 @@ struct VlcSnapshot {
   std::string error_code;
   std::string error_description;
 };
+
+inline bool operator==(const VlcSnapshot& lhs, const VlcSnapshot& rhs) {
+  return lhs.state == rhs.state && lhs.position == rhs.position &&
+         lhs.duration == rhs.duration && lhs.volume == rhs.volume &&
+         lhs.playback_speed == rhs.playback_speed &&
+         lhs.audio_delay == rhs.audio_delay &&
+         lhs.subtitle_delay == rhs.subtitle_delay &&
+         lhs.is_ready == rhs.is_ready && lhs.is_seekable == rhs.is_seekable &&
+         lhs.is_live == rhs.is_live && lhs.video_width == rhs.video_width &&
+         lhs.video_height == rhs.video_height &&
+         lhs.buffering_progress == rhs.buffering_progress &&
+         lhs.error_code == rhs.error_code &&
+         lhs.error_description == rhs.error_description;
+}
+
+inline bool operator!=(const VlcSnapshot& lhs, const VlcSnapshot& rhs) {
+  return !(lhs == rhs);
+}
 
 }  // namespace vlc_player
 

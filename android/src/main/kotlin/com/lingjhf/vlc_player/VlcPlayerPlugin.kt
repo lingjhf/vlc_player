@@ -150,6 +150,7 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 player.addSubtitle(uri, result)
             }
             "getMediaInfo" -> player.getMediaInfo(result)
+            "getMediaStats" -> player.getMediaStats(result)
             else -> result.notImplemented()
         }
     }

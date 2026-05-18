@@ -301,6 +301,14 @@ internal class VlcPlayerPlatformView(
         result.success(mediaInfo(media, mediaPlayer.length))
     }
 
+    fun getMediaStats(result: MethodChannel.Result) {
+        if (!ensureActive(result)) {
+            return
+        }
+
+        result.success(mediaStats(mediaPlayer.media?.getStats()))
+    }
+
     private fun mediaInfo(media: IMedia, playerLength: Long): Map<String, Any?> {
         val info = HashMap<String, Any?>()
         info["title"] = media.getMeta(IMedia.Meta.Title)
@@ -455,6 +463,27 @@ internal class VlcPlayerPlatformView(
             "videoTracks" to emptyList<Map<String, Any?>>(),
             "audioTracks" to emptyList<Map<String, Any?>>(),
             "subtitleTracks" to emptyList<Map<String, Any?>>(),
+        )
+    }
+
+    private fun mediaStats(stats: IMedia.Stats?): Map<String, Any> {
+        return mapOf(
+            "available" to (stats != null),
+            "readBytes" to (stats?.readBytes ?: 0),
+            "inputBitrate" to (stats?.inputBitrate?.toDouble() ?: 0.0),
+            "demuxReadBytes" to (stats?.demuxReadBytes ?: 0),
+            "demuxBitrate" to (stats?.demuxBitrate?.toDouble() ?: 0.0),
+            "demuxCorrupted" to (stats?.demuxCorrupted ?: 0),
+            "demuxDiscontinuity" to (stats?.demuxDiscontinuity ?: 0),
+            "decodedVideo" to (stats?.decodedVideo ?: 0),
+            "decodedAudio" to (stats?.decodedAudio ?: 0),
+            "displayedPictures" to (stats?.displayedPictures ?: 0),
+            "lostPictures" to (stats?.lostPictures ?: 0),
+            "playedAudioBuffers" to (stats?.playedAbuffers ?: 0),
+            "lostAudioBuffers" to (stats?.lostAbuffers ?: 0),
+            "sentPackets" to (stats?.sentPackets ?: 0),
+            "sentBytes" to (stats?.sentBytes ?: 0),
+            "sendBitrate" to (stats?.sendBitrate?.toDouble() ?: 0.0),
         )
     }
 

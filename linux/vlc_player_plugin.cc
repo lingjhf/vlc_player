@@ -10,6 +10,7 @@
 #include <cstring>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -103,6 +104,43 @@ FlValue* MediaInfo(const vlc_player::VlcMediaInfo& media_info) {
   fl_value_set_string_take(info, "subtitleTracks",
                            MediaTracks(media_info.subtitle_tracks));
   return info;
+}
+
+FlValue* MediaStats(const vlc_player::VlcMediaStats& stats) {
+  FlValue* result = fl_value_new_map();
+  fl_value_set_string_take(result, "available",
+                           fl_value_new_bool(stats.available));
+  fl_value_set_string_take(result, "readBytes",
+                           fl_value_new_int(stats.read_bytes));
+  fl_value_set_string_take(result, "inputBitrate",
+                           fl_value_new_float(stats.input_bitrate));
+  fl_value_set_string_take(result, "demuxReadBytes",
+                           fl_value_new_int(stats.demux_read_bytes));
+  fl_value_set_string_take(result, "demuxBitrate",
+                           fl_value_new_float(stats.demux_bitrate));
+  fl_value_set_string_take(result, "demuxCorrupted",
+                           fl_value_new_int(stats.demux_corrupted));
+  fl_value_set_string_take(result, "demuxDiscontinuity",
+                           fl_value_new_int(stats.demux_discontinuity));
+  fl_value_set_string_take(result, "decodedVideo",
+                           fl_value_new_int(stats.decoded_video));
+  fl_value_set_string_take(result, "decodedAudio",
+                           fl_value_new_int(stats.decoded_audio));
+  fl_value_set_string_take(result, "displayedPictures",
+                           fl_value_new_int(stats.displayed_pictures));
+  fl_value_set_string_take(result, "lostPictures",
+                           fl_value_new_int(stats.lost_pictures));
+  fl_value_set_string_take(result, "playedAudioBuffers",
+                           fl_value_new_int(stats.played_audio_buffers));
+  fl_value_set_string_take(result, "lostAudioBuffers",
+                           fl_value_new_int(stats.lost_audio_buffers));
+  fl_value_set_string_take(result, "sentPackets",
+                           fl_value_new_int(stats.sent_packets));
+  fl_value_set_string_take(result, "sentBytes",
+                           fl_value_new_int(stats.sent_bytes));
+  fl_value_set_string_take(result, "sendBitrate",
+                           fl_value_new_float(stats.send_bitrate));
+  return result;
 }
 
 FlValue* FindValue(FlValue* map, const gchar* key) {
@@ -325,6 +363,7 @@ class LinuxVlcPlayer {
     return core_->AddSubtitle(uri);
   }
   FlValue* GetMediaInfo() { return MediaInfo(core_->GetMediaInfo()); }
+  FlValue* GetMediaStats() { return MediaStats(core_->GetMediaStats()); }
 
   bool CopyPixels(const uint8_t** out_buffer,
                   uint32_t* width,
@@ -384,7 +423,7 @@ class LinuxVlcPlayer {
                                        gpointer user_data) {
     auto* player = static_cast<LinuxVlcPlayer*>(user_data);
     player->listening_ = true;
-    player->SendSnapshot();
+    player->SendSnapshot(true);
     return nullptr;
   }
 
@@ -395,12 +434,22 @@ class LinuxVlcPlayer {
     return nullptr;
   }
 
-  void SendSnapshot() {
+  void SendSnapshot(bool force = false) {
     if (disposed_.load() || core_ == nullptr || !listening_.load()) {
       return;
     }
 
     const vlc_player::VlcSnapshot snapshot = core_->Snapshot();
+    {
+      std::lock_guard<std::mutex> lock(snapshot_mutex_);
+      if (!force && has_last_sent_snapshot_ &&
+          snapshot == last_sent_snapshot_) {
+        return;
+      }
+      last_sent_snapshot_ = snapshot;
+      has_last_sent_snapshot_ = true;
+    }
+
     FlValue* event = fl_value_new_map();
     fl_value_set_string_take(event, "state",
                              fl_value_new_string(snapshot.state.c_str()));
@@ -456,6 +505,9 @@ class LinuxVlcPlayer {
   std::atomic<bool> disposed_ = false;
   std::atomic<bool> polling_ = false;
   std::atomic<bool> listening_ = false;
+  std::mutex snapshot_mutex_;
+  bool has_last_sent_snapshot_ = false;
+  vlc_player::VlcSnapshot last_sent_snapshot_;
   std::thread polling_thread_;
   int64_t texture_id_ = -1;
 };
@@ -680,6 +732,9 @@ static FlMethodResponse* handle_method(VlcPlayerPlugin* self,
     }
   } else if (strcmp(method, "getMediaInfo") == 0) {
     g_autoptr(FlValue) result = player->GetMediaInfo();
+    return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
+  } else if (strcmp(method, "getMediaStats") == 0) {
+    g_autoptr(FlValue) result = player->GetMediaStats();
     return FL_METHOD_RESPONSE(fl_method_success_response_new(result));
   } else {
     return FL_METHOD_RESPONSE(fl_method_not_implemented_response_new());

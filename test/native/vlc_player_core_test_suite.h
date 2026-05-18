@@ -38,6 +38,20 @@ TEST(VlcPlayerCore, SnapshotWithoutMediaIsIdle) {
   EXPECT_EQ(snapshot.subtitle_delay, 0);
 }
 
+TEST(VlcPlayerCore, SnapshotEqualityComparesPayloadFields) {
+  VlcSnapshot first;
+  VlcSnapshot second;
+
+  EXPECT_EQ(first, second);
+
+  second.position = 1;
+  EXPECT_NE(first, second);
+
+  second = first;
+  second.error_description = "failed";
+  EXPECT_NE(first, second);
+}
+
 TEST(VlcPlayerCore, RejectsEmptySourceUri) {
   auto core = MakeCore();
 
@@ -82,6 +96,20 @@ TEST(VlcPlayerCore, TakeSnapshotWithoutMediaFailsClearly) {
 
   EXPECT_TRUE(data.empty());
   EXPECT_EQ(error, "No media is loaded.");
+}
+
+TEST(VlcPlayerCore, MediaStatsWithoutMediaIsUnavailable) {
+  auto core = MakeCore();
+
+  ASSERT_TRUE(core->is_valid()) << core->error();
+
+  const VlcMediaStats stats = core->GetMediaStats();
+
+  EXPECT_FALSE(stats.available);
+  EXPECT_EQ(stats.read_bytes, 0);
+  EXPECT_EQ(stats.input_bitrate, 0);
+  EXPECT_EQ(stats.demux_read_bytes, 0);
+  EXPECT_EQ(stats.demux_bitrate, 0);
 }
 
 TEST(VlcPlayerCore, CopyPixelsWithoutFrameReturnsFalse) {

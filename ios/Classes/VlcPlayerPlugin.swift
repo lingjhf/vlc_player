@@ -173,6 +173,8 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       player.addSubtitle(uri, result: result)
     case "getMediaInfo":
       result(player.getMediaInfo())
+    case "getMediaStats":
+      result(player.getMediaStats())
     default:
       result(FlutterMethodNotImplemented)
     }
@@ -439,6 +441,32 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
     ]
   }
 
+  func getMediaStats() -> [String: Any] {
+    guard let media = mediaPlayer.media else {
+      return Self.emptyMediaStats()
+    }
+
+    let stats = media.statistics
+    return [
+      "available": true,
+      "readBytes": Int(stats.readBytes),
+      "inputBitrate": Double(stats.inputBitrate),
+      "demuxReadBytes": Int(stats.demuxReadBytes),
+      "demuxBitrate": Double(stats.demuxBitrate),
+      "demuxCorrupted": Int(stats.demuxCorrupted),
+      "demuxDiscontinuity": Int(stats.demuxDiscontinuity),
+      "decodedVideo": Int(stats.decodedVideo),
+      "decodedAudio": Int(stats.decodedAudio),
+      "displayedPictures": Int(stats.displayedPictures),
+      "lostPictures": Int(stats.lostPictures),
+      "playedAudioBuffers": Int(stats.playedAudioBuffers),
+      "lostAudioBuffers": Int(stats.lostAudioBuffers),
+      "sentPackets": Int(stats.sentPackets),
+      "sentBytes": Int(stats.sentBytes),
+      "sendBitrate": Double(stats.sendBitrate),
+    ]
+  }
+
   func dispose() {
     guard !isDisposed else {
       return
@@ -513,6 +541,27 @@ final class VlcPlayerPlatformView: NSObject, FlutterPlatformView, VLCMediaPlayer
       return nil
     }
     return ["width": width, "height": height]
+  }
+
+  private static func emptyMediaStats() -> [String: Any] {
+    return [
+      "available": false,
+      "readBytes": 0,
+      "inputBitrate": 0.0,
+      "demuxReadBytes": 0,
+      "demuxBitrate": 0.0,
+      "demuxCorrupted": 0,
+      "demuxDiscontinuity": 0,
+      "decodedVideo": 0,
+      "decodedAudio": 0,
+      "displayedPictures": 0,
+      "lostPictures": 0,
+      "playedAudioBuffers": 0,
+      "lostAudioBuffers": 0,
+      "sentPackets": 0,
+      "sentBytes": 0,
+      "sendBitrate": 0.0,
+    ]
   }
 
   private static func applyFit(_ fit: String, to view: UIView) {

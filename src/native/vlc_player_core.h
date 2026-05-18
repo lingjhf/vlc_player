@@ -54,6 +54,7 @@ class VlcPlayerCore {
   std::string DisableSubtitle();
   std::string AddSubtitle(const std::string& uri);
   VlcMediaInfo GetMediaInfo();
+  VlcMediaStats GetMediaStats();
 
   VlcSnapshot Snapshot();
   bool CopyPixels(const uint8_t** out_buffer, uint32_t* width, uint32_t* height);
