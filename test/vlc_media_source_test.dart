@@ -69,5 +69,22 @@ void main() {
       expect(first, second);
       expect(first.hashCode, second.hashCode);
     });
+
+    test('formats source details for diagnostics', () {
+      final source = VlcMediaSource(
+        uri: Uri.parse('https://example.com/video.mp4'),
+        httpHeaders: const <String, String>{'Authorization': 'Bearer token'},
+        mediaOptions: const <String>[':network-caching=1000'],
+        startPosition: const Duration(seconds: 3),
+      );
+
+      expect(
+        source.toString(),
+        'VlcMediaSource(uri: https://example.com/video.mp4, '
+        'httpHeaders: {Authorization: Bearer token}, '
+        'mediaOptions: [:network-caching=1000], '
+        'startPosition: 0:00:03.000000)',
+      );
+    });
   });
 }

@@ -254,6 +254,7 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
   private let mediaPlayer: VLCMediaPlayer
   private let eventChannel: FlutterEventChannel
   private let eventHandler = VlcPlayerEventStreamHandler()
+  private var lastSentEvent: NSDictionary?
   private(set) var isDisposed = false
 
   init(
@@ -270,6 +271,9 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     Self.applyFit(fit, to: view)
     mediaPlayer.drawable = view
     mediaPlayer.delegate = self
+    eventHandler.onListen = { [weak self] in
+      self?.sendSnapshot(force: true)
+    }
     eventChannel.setStreamHandler(eventHandler)
     sendSnapshot()
   }
@@ -298,7 +302,7 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       media.addOption(":start-time=\(Double(startPosition) / 1000.0)")
     }
     mediaPlayer.media = media
-    sendSnapshot(stateOverride: "opening")
+    sendSnapshot(force: true, stateOverride: "opening")
     if autoPlay {
       mediaPlayer.play()
     }
@@ -483,11 +487,15 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
   }
 
   private func sendSnapshot(
+    force: Bool = false,
     stateOverride: String? = nil,
     errorCode: String? = nil,
     errorDescription: String? = nil
   ) {
     guard !isDisposed else {
+      return
+    }
+    guard eventHandler.isListening else {
       return
     }
 
@@ -513,6 +521,11 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       event["errorCode"] = errorCode ?? "playback_error"
       event["errorDescription"] = errorDescription
     }
+    let snapshot = NSDictionary(dictionary: event)
+    if !force, let lastSentEvent = lastSentEvent, lastSentEvent.isEqual(snapshot) {
+      return
+    }
+    lastSentEvent = snapshot
     eventHandler.send(event)
   }
 
@@ -661,9 +674,14 @@ final class VlcPlayerContainerView: VLCVideoView {}
 
 final class VlcPlayerEventStreamHandler: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?
+  var onListen: (() -> Void)?
+  var isListening: Bool {
+    return eventSink != nil
+  }
 
   func onListen(withArguments arguments: Any?, eventSink events: @escaping FlutterEventSink) -> FlutterError? {
     eventSink = events
+    onListen?()
     return nil
   }
 

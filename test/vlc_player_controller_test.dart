@@ -309,10 +309,16 @@ void main() {
         ),
       ];
 
-      await controller.setPlaylist(sources, initialIndex: 1, autoPlay: true);
+      await controller.setPlaylist(
+        sources,
+        initialIndex: 1,
+        autoPlay: true,
+        loopMode: VlcPlaylistLoopMode.loopAll,
+      );
       expect(calls, isEmpty);
       expect(controller.playlist, sources);
       expect(controller.playlistIndex, 1);
+      expect(controller.playlistLoopMode, VlcPlaylistLoopMode.loopAll);
       expect(controller.currentMediaSource, sources[1]);
       expect(controller.hasNext, isFalse);
       expect(controller.hasPrevious, isTrue);
@@ -948,6 +954,47 @@ void main() {
     });
 
     test(
+      'removeFromPlaylistAt restores state when native reload fails',
+      () async {
+        final controller = VlcPlayerController();
+        final sources = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+          VlcMediaSource(uri: Uri.parse('https://example.com/two.mp4')),
+          VlcMediaSource(uri: Uri.parse('https://example.com/three.mp4')),
+        ];
+
+        mockEventChannel(66);
+        await harness.attachController(controller, 66);
+        await controller.setPlaylist(sources, initialIndex: 1);
+        calls.clear();
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (call.method == 'dispose') {
+                return null;
+              }
+              throw PlatformException(
+                code: VlcPlayerErrorCode.setSourceFailed,
+                message: 'reload failed',
+              );
+            });
+
+        await expectLater(
+          controller.removeFromPlaylistAt(1),
+          throwsA(isA<VlcPlayerException>()),
+        );
+        expect(controller.playlist, sources);
+        expect(controller.playlistIndex, 1);
+        expect(controller.currentMediaSource, sources[1]);
+
+        controller.dispose();
+      },
+    );
+
+    test(
       'clearPlaylist is idempotent and stops only active playlists',
       () async {
         final controller = VlcPlayerController();
@@ -968,6 +1015,26 @@ void main() {
         expect(controller.playlistIndex, isNull);
         expect(controller.currentMediaSource, isNull);
         expect(calls.single.method, 'stop');
+
+        controller.dispose();
+      },
+    );
+
+    test(
+      'clearPlaylist before attach clears pending playlist locally',
+      () async {
+        final controller = VlcPlayerController();
+        final sources = <VlcMediaSource>[
+          VlcMediaSource(uri: Uri.parse('https://example.com/one.mp4')),
+        ];
+
+        await controller.setPlaylist(sources);
+        await controller.clearPlaylist();
+
+        expect(calls, isEmpty);
+        expect(controller.playlist, isEmpty);
+        expect(controller.playlistIndex, isNull);
+        expect(controller.currentMediaSource, isNull);
 
         controller.dispose();
       },
@@ -1109,6 +1176,73 @@ void main() {
 
       controller.dispose();
     });
+
+    test(
+      'attachTexturePlayer rejects invalid native creation payloads',
+      () async {
+        final controller = VlcPlayerController();
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              return <String, Object?>{'viewId': 25};
+            });
+
+        await expectLater(
+          harness.attachTexturePlayer(controller),
+          throwsStateError,
+        );
+        expect(calls.single.method, 'create');
+
+        controller.dispose();
+      },
+    );
+
+    test(
+      'attachTexturePlayer releases old view before invalid payload',
+      () async {
+        final controller = VlcPlayerController();
+
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+              call,
+            ) async {
+              calls.add(call);
+              if (call.method == 'create') {
+                final createCount = calls
+                    .where((entry) => entry.method == 'create')
+                    .length;
+                if (createCount == 1) {
+                  mockEventChannel(26);
+                  return <String, Object?>{'viewId': 26, 'textureId': 126};
+                }
+                return <String, Object?>{'textureId': 127};
+              }
+              return null;
+            });
+
+        await harness.attachTexturePlayer(controller);
+        await expectLater(
+          harness.attachTexturePlayer(controller),
+          completion(126),
+        );
+        await harness.detachController(controller);
+        await expectLater(
+          harness.attachTexturePlayer(controller),
+          throwsStateError,
+        );
+
+        expect(calls.map((call) => call.method), <String>[
+          'create',
+          'dispose',
+          'create',
+        ]);
+
+        controller.dispose();
+      },
+    );
 
     test(
       'attachTexturePlayer releases native player if disposed during create',
@@ -1456,6 +1590,28 @@ void main() {
         controller.dispose();
       },
     );
+
+    test('takeSnapshot rejects empty native image data', () async {
+      final controller = VlcPlayerController();
+      mockEventChannel(19);
+      await harness.attachController(controller, 19);
+
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(VlcMethodChannelHarness.methodChannel, (
+            call,
+          ) async {
+            calls.add(call);
+            if (call.method == 'takeSnapshot') {
+              return Uint8List(0);
+            }
+            return null;
+          });
+
+      await expectLater(controller.takeSnapshot(), throwsStateError);
+      expect(calls.single.method, 'takeSnapshot');
+
+      controller.dispose();
+    });
   });
 
   group('event errors', () {

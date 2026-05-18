@@ -45,6 +45,7 @@ internal class VlcPlayerPlatformView(
     private var bufferingProgress: Double? = null
     private var errorCode: String? = null
     private var errorDescription: String? = null
+    private var lastSentEvent: Map<String, Any?>? = null
     private var viewsAttached = false
     private var disposed = false
 
@@ -87,6 +88,7 @@ internal class VlcPlayerPlatformView(
             media.release()
             errorCode = null
             errorDescription = null
+            lastSentEvent = null
             updateState(STATE_OPENING)
             if (autoPlay) {
                 mediaPlayer.play()
@@ -513,7 +515,7 @@ internal class VlcPlayerPlatformView(
         }
     }
 
-    private fun sendSnapshot() {
+    private fun sendSnapshot(force: Boolean = false) {
         if (disposed) {
             return
         }
@@ -541,6 +543,10 @@ internal class VlcPlayerPlatformView(
             event["errorCode"] = errorCode ?: ERROR_PLAYBACK
             event["errorDescription"] = it
         }
+        if (!force && event == lastSentEvent) {
+            return
+        }
+        lastSentEvent = HashMap(event)
         streamHandler.send(event)
     }
 
@@ -559,7 +565,7 @@ internal class VlcPlayerPlatformView(
 
         override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
             this.events = events
-            sendSnapshot()
+            sendSnapshot(force = true)
         }
 
         override fun onCancel(arguments: Any?) {

@@ -77,6 +77,53 @@ void main() {
       expect(first.hashCode, second.hashCode);
       expect(first, isNot(changed));
     });
+
+    test('compares list details deeply', () {
+      const first = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        details: <Object?>[
+          'playlist',
+          <String, Object?>{'index': 1},
+        ],
+      );
+      const second = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        details: <Object?>[
+          'playlist',
+          <String, Object?>{'index': 1},
+        ],
+      );
+      const changed = VlcPlayerError(
+        code: VlcPlayerErrorCode.playbackError,
+        details: <Object?>[
+          'playlist',
+          <String, Object?>{'index': 2},
+        ],
+      );
+
+      expect(first, second);
+      expect(first.hashCode, second.hashCode);
+      expect(first, isNot(changed));
+    });
+
+    test('formats debug descriptions with and without messages', () {
+      const bare = VlcPlayerError(code: VlcPlayerErrorCode.disposed);
+      const empty = VlcPlayerError(
+        code: VlcPlayerErrorCode.disposed,
+        message: '',
+      );
+      const described = VlcPlayerError(
+        code: VlcPlayerErrorCode.createFailed,
+        message: 'Unable to create player',
+      );
+
+      expect(bare.toString(), 'VlcPlayerError(disposed)');
+      expect(empty.toString(), 'VlcPlayerError(disposed)');
+      expect(
+        described.toString(),
+        'VlcPlayerError(create_failed, Unable to create player)',
+      );
+    });
   });
 
   group('VlcPlayerException', () {
@@ -93,6 +140,20 @@ void main() {
       expect(exception.message, 'Invalid argument');
       expect(exception.details, 'speed');
       expect(exception.toString(), contains('Invalid argument'));
+    });
+
+    test('wraps platform exceptions', () {
+      final exception = VlcPlayerException.fromPlatformException(
+        PlatformException(
+          code: VlcPlayerErrorCode.createFailed,
+          message: 'Native create failed',
+          details: <String, Object?>{'viewId': 4},
+        ),
+      );
+
+      expect(exception.code, VlcPlayerErrorCode.createFailed);
+      expect(exception.message, 'Native create failed');
+      expect(exception.details, <String, Object?>{'viewId': 4});
     });
   });
 }

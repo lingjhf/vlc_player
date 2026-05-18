@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 2.0.1 - 2026-05-19
+
+### Changed
+
+- Reduced duplicate Android, iOS, and macOS player events before they reach
+  Dart, matching the existing Linux and Windows event de-duplication behavior.
+- Expanded Dart regression coverage for source diagnostics, structured errors,
+  playlist rollback, texture creation failures, and empty snapshot payloads.
+
 ## 2.0.0 - 2026-05-18
 
 ### Added
