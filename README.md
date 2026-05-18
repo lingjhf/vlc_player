@@ -2,8 +2,9 @@
 
 A Flutter plugin for video playback using VLC.
 
-The plugin creates a native VLC-backed video view and exposes a Dart controller
-for loading media, playback controls, seeking, volume, speed, and state updates.
+`vlc_player` creates a native VLC-backed video view and exposes a Dart
+controller for loading media, controlling playback, selecting tracks, handling
+subtitles, reading playback state, and capturing snapshots.
 
 ## Supported platforms
 
@@ -13,36 +14,10 @@ for loading media, playback controls, seeking, volume, speed, and state updates.
 - Windows
 - Linux
 
-The plugin forwards media URIs to the native VLC library. It does not keep a
-Dart-side format allowlist or parse playlists in Dart.
-
-Playback support depends on the platform VLC library and the codecs used by the
-media source. Common VLC-supported sources include MP4, MOV, MKV, WebM, AVI,
-FLV, MPEG-TS, HLS (`.m3u8`), DASH, RTSP, and RTP.
-
-## Tested format coverage
-
-The repository includes local integration fixtures for MP4, HLS/M3U8 with a
-local MPEG-TS segment, external SRT subtitles, MOV, MKV, WebM, MPEG-TS, MP3,
-AAC/M4A, FLAC, Ogg Vorbis, and Opus.
-
-Run the full format suite from the example app:
-
-```sh
-cd example
-flutter drive --no-dds --timeout=1200 -d macos \
-  --driver=test_driver/integration_test.dart \
-  --target=integration_test/format_compatibility_test.dart
-```
-
-CI runs the `smoke` format suite on Android and the full suite on macOS and
-Windows. iOS CI builds the example app, but simulator integration tests are kept
-out of the GitHub runner because the runner can hang while launching Flutter
-integration tests for this plugin. Linux CI validates native tests and the
-existing plugin lifecycle integration path; media-loading format tests are kept
-out of Linux/Xvfb because that runner currently drops the Flutter Driver service
-connection when local media is loaded. To run a smaller local subset, pass
-`--dart-define=VLC_PLAYER_FORMAT_SUITE=smoke`, `video`, or `audio`.
+The plugin forwards media URIs to the native VLC library. Supported media
+formats, codecs, playlists, and stream protocols depend on the VLC runtime used
+on the target platform. Common VLC-supported sources include MP4, MOV, MKV,
+WebM, AVI, FLV, MPEG-TS, HLS (`.m3u8`), DASH, RTSP, and RTP.
 
 ## Installation
 
@@ -53,79 +28,55 @@ dependencies:
   vlc_player: ^1.0.0
 ```
 
-If you are using this repository directly:
-
-```yaml
-dependencies:
-  vlc_player:
-    path: ../vlc_player
-```
-
 Then run:
 
 ```sh
 flutter pub get
 ```
 
-Applications embedding this plugin must satisfy the binary distribution and
-license requirements for libVLC, MobileVLCKit, VLCKit, and the VLC Windows
-runtime.
-
-See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the third-party
-runtime and source components that app distributors need to account for.
+Apps that embed this plugin must satisfy the binary distribution and license
+requirements for libVLC, MobileVLCKit, VLCKit, and the VLC Windows runtime. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the third-party runtime
+and source components that app distributors need to account for.
 
 ## Platform setup
 
 ### Android
 
-The Android implementation requires `minSdk 26` or newer.
+Android apps must use `minSdk 26` or newer.
 
-Network playback requires internet permission. The plugin manifest declares it:
+Network playback requires internet access. The plugin manifest declares:
 
 ```xml
 <uses-permission android:name="android.permission.INTERNET" />
 ```
 
-The repository CI checks Android APKs for 16 KB native page-size support across
-64-bit packaged native libraries:
-
-```sh
-tool/ci/check_android_16kb_page_size.sh example/build/app/outputs/flutter-apk/app-debug.apk
-```
-
 ### iOS
 
-The plugin depends on `MobileVLCKit`.
+The iOS implementation depends on `MobileVLCKit`.
 
-If your app plays non-HTTPS URLs, configure App Transport Security in the app's
-`Info.plist`. HTTPS URLs do not need ATS exceptions.
+HTTPS media URLs work without extra transport configuration. If your app plays
+non-HTTPS URLs, configure App Transport Security in the app's `Info.plist`.
 
 ### macOS
 
-The plugin depends on `VLCKit`.
+The macOS implementation depends on `VLCKit`.
 
 For sandboxed apps that play network media, enable the network client
-entitlement in the app:
+entitlement:
 
 ```xml
 <key>com.apple.security.network.client</key>
 <true/>
 ```
 
-The macOS podspec patches the VLCKit runtime path during build. Use CocoaPods
-`1.13.0` or newer so the script phase runs reliably.
-
-After changing the macOS podspec or Pods state, run:
-
-```sh
-cd example/macos
-pod install
-```
+Use CocoaPods `1.13.0` or newer so the VLCKit runtime path script phase runs
+reliably.
 
 ### Windows
 
 The Windows implementation downloads the VLC Windows runtime during
-`flutter build windows` and bundles it into your app automatically.
+`flutter build windows` and bundles it into your app automatically:
 
 ```text
 build/windows/x64/runner/Release/
@@ -135,15 +86,8 @@ build/windows/x64/runner/Release/
   plugins/
 ```
 
-The build downloads VLC `3.0.21` for Windows x64 from VideoLAN and verifies the
-archive SHA-256 before extraction. Windows builds require network access the
-first time the runtime is downloaded.
-
-Windows video is rendered through a Flutter texture backed by libVLC video
-callbacks, so the Dart API is the same as the other platforms.
-The native Windows implementation uses the vendored official `libvlcpp`
-header-only bindings and links against the VLC SDK import library from the
-downloaded runtime archive.
+The first Windows build requires network access to download the verified VLC
+runtime archive.
 
 ### Linux
 
@@ -154,14 +98,9 @@ pkg-config. Install VLC development files before building a Linux app:
 sudo apt install libvlc-dev vlc
 ```
 
-Linux video is rendered through a Flutter texture backed by libVLC video
-callbacks, so the Dart API is the same as the other desktop platforms.
-The native Linux implementation uses the vendored official `libvlcpp`
-header-only bindings and links against the system `libvlc` package.
-
 ## Usage
 
-### Play a video file
+### Create a player
 
 ```dart
 import 'package:flutter/material.dart';
@@ -198,13 +137,16 @@ class _VideoPageState extends State<VideoPage> {
 }
 ```
 
+`setMedia()` can be called before the controller is attached to a `VlcPlayer`.
+Commands such as `play()`, `pause()`, and `seekTo()` require an attached player
+and throw `StateError` if called too early or after disposal.
+
 ### Play an HLS stream
 
-HLS playback is handled by the native VLC library. Pass the `.m3u8` playlist URL
-as the media source:
+Pass the `.m3u8` playlist URL as the media source:
 
 ```dart
-late final VlcPlayerController controller = VlcPlayerController(
+final controller = VlcPlayerController(
   mediaSource: VlcMediaSource(
     uri: Uri.parse('https://example.com/live/playlist.m3u8'),
   ),
@@ -212,36 +154,10 @@ late final VlcPlayerController controller = VlcPlayerController(
 );
 ```
 
-### Control playback
+### Load media with headers and VLC options
 
-```dart
-await controller.play();
-await controller.pause();
-await controller.seekTo(const Duration(seconds: 30));
-await controller.setVolume(100);
-await controller.setPlaybackSpeed(1.25);
-await controller.setAudioDelay(const Duration(milliseconds: -120));
-await controller.setSubtitleDelay(const Duration(milliseconds: 250));
-
-final pngBytes = await controller.takeSnapshot(width: 320);
-debugPrint('snapshot bytes=${pngBytes.length}');
-```
-
-### Fit the video
-
-Use `VlcPlayer.fit` to choose how the native video is fitted inside the widget:
-
-```dart
-VlcPlayer(
-  controller: controller,
-  fit: VlcVideoFit.cover,
-)
-```
-
-### Play with headers and VLC media options
-
-Use `VlcMediaSource` when a URL needs request headers, per-item VLC options, or
-an initial seek position:
+Use `VlcMediaSource` when a URL needs request headers, per-item VLC media
+options, or an initial seek position:
 
 ```dart
 await controller.setMedia(
@@ -258,6 +174,42 @@ await controller.setMedia(
   autoPlay: true,
 );
 ```
+
+### Control playback
+
+```dart
+await controller.play();
+await controller.pause();
+await controller.seekTo(const Duration(seconds: 30));
+await controller.setVolume(100);
+await controller.setPlaybackSpeed(1.25);
+await controller.setAudioDelay(const Duration(milliseconds: -120));
+await controller.setSubtitleDelay(const Duration(milliseconds: 250));
+await controller.stop();
+```
+
+### Fit the video
+
+Use `VlcPlayer.fit` to choose how the video is fitted inside the widget:
+
+```dart
+VlcPlayer(
+  controller: controller,
+  fit: VlcVideoFit.cover,
+)
+```
+
+Available values are `contain`, `cover`, `fill`, and `none`.
+
+### Capture a snapshot
+
+```dart
+final pngBytes = await controller.takeSnapshot(width: 320);
+debugPrint('snapshot bytes=${pngBytes.length}');
+```
+
+When only `width` or `height` is provided, VLC preserves the source aspect ratio
+where the platform backend supports it.
 
 ### Play a playlist
 
@@ -281,6 +233,9 @@ await controller.addToPlaylist(
 await controller.shufflePlaylist(seed: 42);
 ```
 
+Playlist state is available through `playlist`, `playlistIndex`,
+`playlistLoopMode`, `currentMediaSource`, `hasNext`, and `hasPrevious`.
+
 ### Select tracks and subtitles
 
 ```dart
@@ -298,88 +253,53 @@ await controller.addSubtitle(Uri.file('/path/to/subtitles.srt'));
 await controller.disableSubtitle();
 
 final info = await controller.getMediaInfo();
-debugPrint('duration=${info.duration}, videoTracks=${info.videoTracks.length}');
+debugPrint('duration=${info.duration}');
 ```
 
-Playback commands require the controller to be attached to a `VlcPlayer`.
-Calling commands such as `play()` before attachment throws a `StateError`.
-Native platform failures throw `VlcPlayerException`, which exposes a structured
-`VlcPlayerError` with `code`, `message`, and `details`.
+Track selection methods use native VLC track ids returned by
+`getAudioTracks()` and `getSubtitleTracks()`.
 
-`setMedia()` can be called before attachment. The media source is replayed when
-the platform view is created.
+### Listen for state changes
 
-## API stability
-
-The `1.x` line follows Semantic Versioning. Backward-compatible additions use
-minor versions, fixes use patch versions, and breaking API, platform, or
-behavior changes use major versions.
-
-Use the exported `package:vlc_player/vlc_player.dart` library as the supported
-application-facing API. Native view attachment, texture creation, method
-channels, and platform view type details are implementation internals and are
-not part of the supported API contract.
-
-## Migrating from 0.8.x
-
-Version `1.0.0` raises the Android minimum SDK from 24 to 26. Apps embedding the
-plugin must set `minSdk 26` or newer in their Android app module. This change is
-required because Android snapshots use `PixelCopy` directly.
-
-## Migrating from 0.7.21 or earlier
-
-Version `0.7.22` removed the controller `setSource()` shortcut and the
-controller constructor's `source` and `httpHeaders` compatibility parameters.
-Use `VlcMediaSource` consistently instead.
-
-Before:
+`VlcPlayerController` extends `ValueNotifier<VlcPlayerValue>`.
 
 ```dart
-final controller = VlcPlayerController(
-  source: Uri.parse('https://example.com/video.mp4'),
-  httpHeaders: const <String, String>{
-    'Authorization': 'Bearer token',
+ValueListenableBuilder<VlcPlayerValue>(
+  valueListenable: controller,
+  builder: (context, value, child) {
+    return Text('${value.state} ${value.position}');
   },
-  autoPlay: true,
-);
-
-await controller.setSource(
-  Uri.parse('https://example.com/next.mp4'),
-  autoPlay: true,
-);
+)
 ```
 
-After:
+Native platform failures throw `VlcPlayerException` and may also be exposed
+through `VlcPlayerValue.error`.
 
 ```dart
-final controller = VlcPlayerController(
-  mediaSource: VlcMediaSource(
-    uri: Uri.parse('https://example.com/video.mp4'),
-    httpHeaders: const <String, String>{
-      'Authorization': 'Bearer token',
-    },
-  ),
-  autoPlay: true,
-);
-
-await controller.setMedia(
-  VlcMediaSource(uri: Uri.parse('https://example.com/next.mp4')),
-  autoPlay: true,
-);
+try {
+  await controller.play();
+} on VlcPlayerException catch (error) {
+  debugPrint('VLC command failed: ${error.code} ${error.message}');
+}
 ```
 
 ## API
 
-This section is a quick reference for the public API. The complete generated API
-reference is published with the package at
-[pub.dev/documentation/vlc_player](https://pub.dev/documentation/vlc_player/latest/vlc_player/).
+The supported application-facing API is exported from:
+
+```dart
+import 'package:vlc_player/vlc_player.dart';
+```
+
+Native view attachment, texture creation, method channels, and platform view
+type details are implementation internals.
 
 ### VlcPlayer
 
-`VlcPlayer` is the Flutter widget that creates the native platform video view.
+`VlcPlayer` is the Flutter widget that hosts the native VLC video output.
 
 ```dart
-VlcPlayer({
+const VlcPlayer({
   Key? key,
   required VlcPlayerController controller,
   Color backgroundColor = Colors.black,
@@ -387,11 +307,10 @@ VlcPlayer({
 })
 ```
 
-Parameters:
-
-- `controller`: Controls the native VLC player attached to this widget.
-- `backgroundColor`: Background color shown behind the native video view.
-- `fit`: How video is fitted inside the widget bounds.
+- `controller`: controller used to load media, control playback, and observe
+  state.
+- `backgroundColor`: color shown behind the native video output.
+- `fit`: video fitting behavior inside the widget bounds.
 
 ### VlcPlayerController
 
@@ -407,140 +326,98 @@ VlcPlayerController({
 })
 ```
 
-Constructor parameters:
+- `mediaSource`: optional initial media item.
+- `autoPlay`: starts playback after the initial media source is loaded.
+- `options`: VLC instance options applied when the native player is created.
+- `eventThrottleInterval`: optional interval for coalescing progress-only
+  native events.
 
-- `mediaSource`: Optional initial `VlcMediaSource` for headers, media options,
-  and a start position.
-- `autoPlay`: Starts playback automatically after `mediaSource` is set.
-- `options`: VLC options passed to the native player when the platform view is
-  created.
-- `eventThrottleInterval`: Optional positive interval for coalescing native
-  events that only change `position`, `duration`, or `bufferingProgress`.
-  Playback state, readiness, volume, speed, video size, and errors still notify
-  immediately. Leave this as `null` to receive every distinct native event.
+Important properties:
 
-Methods:
+- `value`: current `VlcPlayerValue`.
+- `isAttached`: whether the controller is attached to a native player.
+- `playlist`, `playlistIndex`, `playlistLoopMode`: current playlist state.
+- `currentMediaSource`: active or pending media source.
+- `hasNext`, `hasPrevious`: whether playlist navigation can move without
+  wrapping.
 
-- `setMedia(VlcMediaSource source, {bool autoPlay = false})`: Loads a media URI
-  with HTTP headers, VLC media options, and an optional start position.
-- `setPlaylist(List<VlcMediaSource> sources, {int initialIndex = 0, bool autoPlay = false, bool autoAdvance = true, VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none})`: Loads a playlist and selects the initial item.
-- `next({bool autoPlay = true})`: Moves to the next playlist item. Returns
-  `false` at the end of the playlist.
-- `previous({bool autoPlay = true})`: Moves to the previous playlist item.
-  Returns `false` at the beginning of the playlist.
-- `jumpTo(int index, {bool autoPlay = true})`: Loads a playlist item by index.
-- `addToPlaylist(VlcMediaSource source)`: Appends a media item to the active
-  playlist.
-- `insertIntoPlaylist(int index, VlcMediaSource source)`: Inserts a media item
-  into the active playlist.
-- `removeFromPlaylistAt(int index)`: Removes a media item and updates the
-  current item selection.
-- `clearPlaylist()`: Stops active playlist playback and clears playlist state.
-- `shufflePlaylist({int? seed})`: Shuffles the active playlist while preserving
-  the current item.
-- `play()`: Starts or resumes playback.
-- `pause()`: Pauses playback.
-- `stop()`: Stops playback.
-- `seekTo(Duration position)`: Seeks to a non-negative playback position.
-- `setVolume(int volume)`: Sets volume. Values are clamped to `0..200`.
-- `setPlaybackSpeed(double speed)`: Sets playback speed. The value must be
-  finite and greater than zero.
-- `setAudioDelay(Duration delay)`: Sets VLC audio delay. Negative values play
-  audio earlier.
-- `setSubtitleDelay(Duration delay)`: Sets VLC subtitle delay. Negative values
-  show subtitles earlier.
-- `takeSnapshot({int? width, int? height})`: Captures the current video as PNG
-  bytes. If only one dimension is provided, VLC preserves the source aspect
-  ratio where the platform API supports it.
-- `getAudioTracks()`: Returns available audio tracks.
-- `setAudioTrack(int id)`: Selects an audio track by VLC track id.
-- `getSubtitleTracks()`: Returns available embedded subtitle tracks.
-- `setSubtitleTrack(int id)`: Selects an embedded subtitle track by VLC track
-  id.
-- `disableSubtitle()`: Disables subtitle rendering.
-- `addSubtitle(Uri uri)`: Adds an external subtitle file or URL and selects it.
-- `getMediaInfo()`: Returns basic metadata and discovered media tracks.
-- `dispose()`: Releases the native player attached to this controller.
+Media and playlist methods:
 
-Track methods return `VlcTrackDescription`. `getMediaInfo()` returns
-`VlcMediaInfo`, including title, artist, album, duration, and basic video,
-audio, and subtitle track details when VLC exposes them.
+- `setMedia(VlcMediaSource source, {bool autoPlay = false})`
+- `setPlaylist(List<VlcMediaSource> sources, {int initialIndex = 0, bool autoPlay = false, bool autoAdvance = true, VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none})`
+- `next({bool autoPlay = true})`
+- `previous({bool autoPlay = true})`
+- `jumpTo(int index, {bool autoPlay = true})`
+- `addToPlaylist(VlcMediaSource source)`
+- `insertIntoPlaylist(int index, VlcMediaSource source)`
+- `removeFromPlaylistAt(int index, {bool autoPlay = true})`
+- `clearPlaylist()`
+- `shufflePlaylist({int? seed})`
 
-Playlist state is exposed through `playlist`, `playlistIndex`,
-`playlistLoopMode`, `currentMediaSource`, `hasNext`, and `hasPrevious`. When
-`autoAdvance` is true, the controller loads the next item after VLC reports the
-current media ended. `VlcPlaylistLoopMode.loopOne` repeats the current item, and
-`VlcPlaylistLoopMode.loopAll` wraps at the beginning or end of the playlist.
+Playback methods:
 
-Command failures throw `VlcPlayerException`. Commands that require a native
-player instance throw `StateError` when called before `VlcPlayer` attaches the
-controller or after the controller is disposed.
+- `play()`
+- `pause()`
+- `stop()`
+- `seekTo(Duration position)`
+- `setVolume(int volume)`
+- `setPlaybackSpeed(double speed)`
+- `setAudioDelay(Duration delay)`
+- `setSubtitleDelay(Duration delay)`
+- `takeSnapshot({int? width, int? height})`
+
+Track, subtitle, and media information methods:
+
+- `getAudioTracks()`
+- `setAudioTrack(int id)`
+- `getSubtitleTracks()`
+- `setSubtitleTrack(int id)`
+- `disableSubtitle()`
+- `addSubtitle(Uri uri)`
+- `getMediaInfo()`
+
+`setVolume()` clamps values to VLC's `0..200` range. `seekTo()` requires a
+non-negative position. `setPlaybackSpeed()` requires a finite value greater
+than zero.
 
 ### VlcMediaSource
 
 `VlcMediaSource` describes one media item before it is passed to VLC.
 
 ```dart
-final source = VlcMediaSource(
-  uri: Uri.parse('https://example.com/video.mp4'),
-  httpHeaders: const <String, String>{
-    'Authorization': 'Bearer token',
-  },
-  mediaOptions: const <String>[
-    ':network-caching=1200',
-  ],
-  startPosition: const Duration(seconds: 30),
-);
-
-await controller.setMedia(source, autoPlay: true);
+VlcMediaSource({
+  required Uri uri,
+  Map<String, String> httpHeaders = const <String, String>{},
+  List<String> mediaOptions = const <String>[],
+  Duration startPosition = Duration.zero,
+})
 ```
 
-`uri` must be non-empty and `startPosition` must be non-negative.
-
-### Track and media information
-
-`getAudioTracks()` and `getSubtitleTracks()` return `VlcTrackDescription`
-objects:
-
-- `id`: Native VLC track id used by `setAudioTrack()` or
-  `setSubtitleTrack()`.
-- `name`: Track name reported by VLC.
-- `language`: Optional language code or label reported by VLC.
-
-`getMediaInfo()` returns `VlcMediaInfo`:
-
-- `title`, `artist`, `album`: Metadata discovered by VLC when available.
-- `duration`: Media duration, or `Duration.zero` when unknown.
-- `videoTracks`, `audioTracks`, `subtitleTracks`: Lists of
-  `VlcMediaTrackInfo`.
-
-`VlcMediaTrackInfo` includes `type`, `codec`, `language`, `bitrate`, `width`,
-`height`, `channels`, and `sampleRate`. These fields are best-effort because
-containers and streams do not always expose all values.
+- `uri`: non-empty media URI to load.
+- `httpHeaders`: HTTP headers used when opening the media.
+- `mediaOptions`: VLC media options applied only to this source.
+- `startPosition`: non-negative initial playback position.
 
 ### VlcPlayerValue
 
-`VlcPlayerValue` is emitted through `VlcPlayerController.value`.
+`VlcPlayerValue` is the immutable playback snapshot emitted by the controller.
 
 Fields:
 
-- `state`: Current `VlcPlaybackState`.
-- `position`: Current playback position.
-- `duration`: Media duration.
-- `volume`: Current volume.
-- `playbackSpeed`: Current playback speed.
-- `audioDelay`: Current audio delay.
-- `subtitleDelay`: Current subtitle delay.
-- `isReady`: Whether the native player has reached a playable terminal or
-  active playback state.
-- `isSeekable`: Whether VLC reports the current media as seekable.
-- `isLive`: Whether the current media looks like a non-seekable stream without a
-  fixed duration.
-- `videoSize`: Current decoded video size when VLC exposes it.
-- `bufferingProgress`: Normalized buffering progress from `0.0` to `1.0` when
-  the platform exposes it; otherwise `null`.
-- `error`: Structured native playback error, when available.
-- `errorDescription`: Native playback error text, when available.
+- `state`
+- `position`
+- `duration`
+- `volume`
+- `playbackSpeed`
+- `audioDelay`
+- `subtitleDelay`
+- `isReady`
+- `isSeekable`
+- `isLive`
+- `videoSize`
+- `bufferingProgress`
+- `error`
+- `errorDescription`
 
 Convenience getters:
 
@@ -561,70 +438,105 @@ Possible playback states:
 - `ended`
 - `error`
 
+### VlcVideoFit
+
+Possible video fitting values:
+
+- `contain`
+- `cover`
+- `fill`
+- `none`
+
+### VlcPlaylistLoopMode
+
+Possible playlist loop values:
+
+- `none`
+- `loopOne`
+- `loopAll`
+
+### Track and media information
+
+`getAudioTracks()` and `getSubtitleTracks()` return
+`VlcTrackDescription` objects:
+
+- `id`: native VLC track id.
+- `name`: track name reported by VLC.
+- `language`: optional language code or label reported by VLC.
+
+`getMediaInfo()` returns `VlcMediaInfo`:
+
+- `title`, `artist`, `album`: metadata discovered by VLC when available.
+- `duration`: media duration, or `Duration.zero` when unknown.
+- `videoTracks`, `audioTracks`, `subtitleTracks`: lists of
+  `VlcMediaTrackInfo`.
+
+`VlcMediaTrackInfo` includes `type`, `codec`, `language`, `bitrate`, `width`,
+`height`, `channels`, and `sampleRate`. These values are best-effort because
+containers and streams do not always expose every field.
+
 ### Errors
 
-Native failures are exposed as `VlcPlayerException`, which wraps a
-`VlcPlayerError`:
+Native command failures are exposed as `VlcPlayerException`, which wraps a
+structured `VlcPlayerError`.
 
-```dart
-try {
-  await controller.play();
-} on VlcPlayerException catch (error) {
-  debugPrint('VLC command failed: ${error.code} ${error.message}');
-}
-```
+`VlcPlayerError` exposes:
+
+- `code`
+- `message`
+- `details`
+- `description`
 
 Common error codes are available in `VlcPlayerErrorCode`, including
-`playerNotFound`, `setSourceFailed`, `trackNotFound`, `addSubtitleFailed`,
-`playbackError`, `disposed`, and `eventChannelError`.
+`invalidArgs`, `playerNotFound`, `createFailed`, `setSourceFailed`,
+`trackNotFound`, `addSubtitleFailed`, `playbackError`, `disposed`, and
+`eventChannelError`.
 
-### Listening for state changes
+## Migration notes
 
-`VlcPlayerController` extends `ValueNotifier<VlcPlayerValue>`, so it can be used
-with `ValueListenableBuilder`.
+The `1.x` line follows Semantic Versioning. Backward-compatible additions use
+minor versions, fixes use patch versions, and breaking API, platform, or
+behavior changes use major versions.
+
+Version `1.0.0` requires Android `minSdk 26` or newer.
+
+For apps migrating from older releases that used `source`, `httpHeaders`, or
+`setSource()`, use `VlcMediaSource` and `setMedia()` instead:
 
 ```dart
-ValueListenableBuilder<VlcPlayerValue>(
-  valueListenable: controller,
-  builder: (context, value, child) {
-    return Text('${value.state} ${value.position}');
-  },
-)
-```
+final controller = VlcPlayerController(
+  mediaSource: VlcMediaSource(
+    uri: Uri.parse('https://example.com/video.mp4'),
+    httpHeaders: const <String, String>{
+      'Authorization': 'Bearer token',
+    },
+  ),
+  autoPlay: true,
+);
 
-## Example app
-
-The `example` app contains:
-
-- A video file playback page.
-- An HLS stream playback page.
-- A full player page with play/pause, seek, time display, and orientation
-  controls, fit selection, and snapshot capture.
-
-Run it on macOS:
-
-```sh
-cd example
-flutter run -d macos
+await controller.setMedia(
+  VlcMediaSource(uri: Uri.parse('https://example.com/next.mp4')),
+  autoPlay: true,
+);
 ```
 
 ## Troubleshooting
 
 ### `player_not_found`
 
-This usually means a command was sent after the native platform view was
-disposed or before the controller attached to the current view. Keep one
+This usually means a command was sent after the native player was disposed or
+before the controller attached to the current `VlcPlayer`. Keep one
 `VlcPlayerController` per player widget and call `dispose()` from the owning
 widget's `dispose()` method.
 
 ### Network playback fails
 
-Check:
+Check that:
 
 - The media URL is reachable from the device.
 - Android has internet permission.
 - macOS sandboxed apps have the network client entitlement.
-- iOS ATS allows the URL if it is not HTTPS.
+- iOS allows the URL through App Transport Security if it is not HTTPS.
 - Required HTTP headers are passed through `VlcMediaSource.httpHeaders`.
 - Linux has `libvlc-dev` and `vlc` installed.
 
@@ -633,7 +545,7 @@ Check:
 Run `pod install` in the macOS app directory and rebuild:
 
 ```sh
-cd example/macos
+cd macos
 pod install
 cd ..
 flutter build macos
