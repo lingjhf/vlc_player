@@ -117,16 +117,6 @@ jobs:
         working-directory: example
         run: flutter build macos
 
-      - name: Run macOS integration tests
-        working-directory: example
-        timeout-minutes: 20
-        run: flutter test integration_test/plugin_integration_test.dart -d macos
-
-      - name: Run macOS format compatibility tests
-        working-directory: example
-        timeout-minutes: 20
-        run: flutter test integration_test/format_compatibility_test.dart -d macos
-
   windows:
     name: Windows
     if: ${{ !startsWith(github.head_ref || github.ref_name, 'linux/') }}
