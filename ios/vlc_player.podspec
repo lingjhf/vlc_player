@@ -14,12 +14,13 @@ A Flutter plugin for video playback using VideoLAN VLCKit.
   s.author           = { 'lingjhf' => 'lingjhf@users.noreply.github.com' }
 
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'vlc_player/Sources/vlc_player/**/*.swift'
+  s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}
 
   s.dependency 'Flutter'
   s.dependency 'MobileVLCKit'
 
-  s.platform = :ios, '12.0'
-  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
+  s.platform = :ios, '13.0'
+  s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.0'
 end

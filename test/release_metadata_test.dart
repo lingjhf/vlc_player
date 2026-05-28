@@ -27,13 +27,14 @@ void main() {
     );
   });
 
-  test('podspec metadata points to the project owner', () {
-    for (final path in <String>[
-      'ios/vlc_player.podspec',
-      'macos/vlc_player.podspec',
-    ]) {
-      final podspec = _fileText(path);
+  test('podspec metadata uses project owner and Flutter 3.44 source layout', () {
+    final podspecs = <String, String>{
+      'ios/vlc_player.podspec': 'MobileVLCKit',
+      'macos/vlc_player.podspec': 'VLCKit',
+    };
 
+    for (final entry in podspecs.entries) {
+      final podspec = _fileText(entry.key);
       expect(
         podspec,
         contains(
@@ -48,7 +49,23 @@ void main() {
       );
       expect(podspec, isNot(contains('https://flutter.dev')));
       expect(podspec, isNot(contains('noreply@example.com')));
+      expect(
+        podspec,
+        contains("s.source_files = 'vlc_player/Sources/vlc_player/**/*.swift'"),
+      );
+      expect(
+        podspec,
+        contains(
+          "s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}",
+        ),
+      );
+      expect(podspec, contains("s.dependency '${entry.value}'"));
     }
+  });
+
+  test('Swift package manager does not replace official VLCKit pods', () {
+    expect(File('ios/vlc_player/Package.swift').existsSync(), isFalse);
+    expect(File('macos/vlc_player/Package.swift').existsSync(), isFalse);
   });
 
   test('third-party notices are linked from README', () {

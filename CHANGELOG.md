@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+### Changed
+
+- Aligned the plugin and example project scaffolding with the Flutter 3.44
+  plugin template while preserving the existing VLC playback API and native
+  implementations.
+- Updated the Dart SDK constraint to `^3.12.0` and refreshed Android template
+  tooling to AGP 9.0.1, Kotlin 2.3.20, and Gradle 9.1.0.
+- Moved iOS and macOS Swift sources to the Flutter 3.44 plugin source layout
+  while keeping the official CocoaPods `MobileVLCKit` and `VLCKit`
+  dependencies.
+
 ## 2.0.1 - 2026-05-19
 
 ### Changed

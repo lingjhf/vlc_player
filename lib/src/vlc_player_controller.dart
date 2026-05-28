@@ -772,10 +772,7 @@ class _VlcPlayerController extends VlcPlayerController
       throw StateError('The controller is not attached to a VlcPlayer.');
     }
 
-    return <String, Object?>{
-      'viewId': viewId,
-      if (arguments != null) ...arguments,
-    };
+    return <String, Object?>{'viewId': viewId, ...?arguments};
   }
 
   Map<String, Object?> _sourceArguments(

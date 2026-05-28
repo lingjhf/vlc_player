@@ -1,1 +1,1 @@
-rootProject.name = 'vlc_player'
+rootProject.name = "vlc_player"

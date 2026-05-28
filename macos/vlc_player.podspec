@@ -14,12 +14,13 @@ A macOS Flutter plugin for video playback using VideoLAN VLCKit.
   s.author           = { 'lingjhf' => 'lingjhf@users.noreply.github.com' }
 
   s.source           = { :path => '.' }
-  s.source_files = 'Classes/**/*'
+  s.source_files = 'vlc_player/Sources/vlc_player/**/*.swift'
+  s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}
 
   s.dependency 'FlutterMacOS'
   s.dependency 'VLCKit'
 
-  s.platform = :osx, '11.0'
+  s.platform = :osx, '10.15'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES' }
   s.script_phase = {
     :name => 'Patch VLCKit runtime path',

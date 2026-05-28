@@ -11,7 +11,7 @@ topics:
   - streaming
 
 environment:
-  sdk: ^3.11.0
+  sdk: ^3.12.0
   flutter: '>=3.3.0'
 
 dependencies:
@@ -28,6 +28,9 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  config:
+    enable-swift-package-manager: false
+
   # This section identifies this Flutter project as a plugin project.
   # The 'pluginClass' specifies the class (in Java, Kotlin, Swift, Objective-C, etc.)
   # which should be registered in the plugin registry. This is required for
@@ -45,12 +48,12 @@ flutter:
         pluginClass: VlcPlayerPlugin
       ios:
         pluginClass: VlcPlayerPlugin
+      linux:
+        pluginClass: VlcPlayerPlugin
       macos:
         pluginClass: VlcPlayerPlugin
       windows:
         pluginClass: VlcPlayerPluginCApi
-      linux:
-        pluginClass: VlcPlayerPlugin
 
   # To add assets to your plugin package, add an assets section, like this:
   # assets:

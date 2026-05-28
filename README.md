@@ -54,12 +54,16 @@ Network playback requires internet access. The plugin manifest declares:
 
 ### iOS
 
+The iOS implementation requires iOS 13 or newer.
+
 The iOS implementation depends on `MobileVLCKit`.
 
 HTTPS media URLs work without extra transport configuration. If your app plays
 non-HTTPS URLs, configure App Transport Security in the app's `Info.plist`.
 
 ### macOS
+
+The macOS implementation requires macOS 10.15 or newer.
 
 The macOS implementation depends on `VLCKit`.
 
