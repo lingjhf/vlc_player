@@ -21,6 +21,7 @@ import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
 import org.videolan.libvlc.MediaPlayer.ScaleType
 import org.videolan.libvlc.interfaces.IMedia
+import org.videolan.libvlc.interfaces.IVLCVout
 import org.videolan.libvlc.util.VLCVideoLayout
 
 internal class VlcPlayerPlatformView(
@@ -35,9 +36,64 @@ internal class VlcPlayerPlatformView(
     private val videoLayout = VLCVideoLayout(context)
     private val libVLC = LibVLC(context, options)
     private val mediaPlayer = MediaPlayer(libVLC)
+    private val videoScale = scaleTypeFor(fit)
     private val eventChannel = EventChannel(messenger, "vlc_player/events/$viewIdentifier")
     private val streamHandler = StreamHandler()
     private val viewId = viewIdentifier.toLong()
+    private val attachStateListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(view: View) {
+            scheduleAttachViews()
+        }
+
+        override fun onViewDetachedFromWindow(view: View) {
+            releaseViews()
+        }
+    }
+    private val layoutChangeListener = object : View.OnLayoutChangeListener {
+        override fun onLayoutChange(
+            view: View,
+            left: Int,
+            top: Int,
+            right: Int,
+            bottom: Int,
+            oldLeft: Int,
+            oldTop: Int,
+            oldRight: Int,
+            oldBottom: Int,
+        ) {
+            if (
+                left != oldLeft ||
+                top != oldTop ||
+                right != oldRight ||
+                bottom != oldBottom
+            ) {
+                scheduleAttachViews()
+            }
+        }
+    }
+    private val voutCallback = object : IVLCVout.Callback {
+        override fun onSurfacesCreated(vlcVout: IVLCVout) {
+            if (disposed) {
+                return
+            }
+            viewsAttached = true
+            mediaPlayer.setVideoScale(videoScale)
+            sendSnapshot()
+        }
+
+        override fun onSurfacesDestroyed(vlcVout: IVLCVout) {
+            viewsAttached = false
+            if (disposed || detachingViews) {
+                return
+            }
+            mainHandler.post {
+                if (!disposed) {
+                    releaseViews()
+                    scheduleAttachViews()
+                }
+            }
+        }
+    }
 
     private var state = STATE_IDLE
     private var volume = 100
@@ -47,13 +103,17 @@ internal class VlcPlayerPlatformView(
     private var errorDescription: String? = null
     private var lastSentEvent: Map<String, Any?>? = null
     private var viewsAttached = false
+    private var detachingViews = false
+    private var attachViewsPosted = false
     private var disposed = false
 
     init {
         videoLayout.setBackgroundColor(Color.BLACK)
+        videoLayout.addOnAttachStateChangeListener(attachStateListener)
+        videoLayout.addOnLayoutChangeListener(layoutChangeListener)
         mediaPlayer.setEventListener(this)
-        attachViewsIfNeeded()
-        mediaPlayer.setVideoScale(scaleTypeFor(fit))
+        mediaPlayer.vlcVout.addCallback(voutCallback)
+        scheduleAttachViews()
         eventChannel.setStreamHandler(streamHandler)
     }
 
@@ -338,7 +398,7 @@ internal class VlcPlayerPlatformView(
 
     override fun onFlutterViewAttached(flutterView: View) {
         if (!disposed) {
-            attachViewsIfNeeded()
+            scheduleAttachViews()
         }
     }
 
@@ -353,8 +413,11 @@ internal class VlcPlayerPlatformView(
         disposed = true
         eventChannel.setStreamHandler(null)
         mediaPlayer.setEventListener(null)
+        videoLayout.removeOnAttachStateChangeListener(attachStateListener)
+        videoLayout.removeOnLayoutChangeListener(layoutChangeListener)
+        mediaPlayer.vlcVout.removeCallback(voutCallback)
         mediaPlayer.stop()
-        detachViewsIfNeeded()
+        releaseViews()
         mediaPlayer.release()
         libVLC.release()
         onDispose(viewId, this)
@@ -423,16 +486,37 @@ internal class VlcPlayerPlatformView(
     }
 
     private fun attachViewsIfNeeded() {
-        if (!viewsAttached) {
-            mediaPlayer.attachViews(videoLayout, null, false, false)
-            viewsAttached = true
+        if (disposed || viewsAttached || !videoLayout.isAttachedToWindow) {
+            return
+        }
+        releaseViews()
+        mediaPlayer.attachViews(videoLayout, null, false, true)
+        mediaPlayer.setVideoScale(videoScale)
+        viewsAttached = true
+    }
+
+    private fun scheduleAttachViews() {
+        if (disposed || attachViewsPosted) {
+            return
+        }
+        attachViewsPosted = true
+        mainHandler.post {
+            attachViewsPosted = false
+            attachViewsIfNeeded()
         }
     }
 
     private fun detachViewsIfNeeded() {
-        if (viewsAttached) {
+        releaseViews()
+    }
+
+    private fun releaseViews() {
+        detachingViews = true
+        try {
             mediaPlayer.detachViews()
             viewsAttached = false
+        } finally {
+            detachingViews = false
         }
     }
 
