@@ -65,12 +65,12 @@ jobs:
       - name: Run macOS integration tests
         working-directory: example
         timeout-minutes: 20
-        run: flutter drive --no-dds --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+        run: flutter test integration_test/plugin_integration_test.dart -d macos
 
       - name: Run macOS format compatibility tests
         working-directory: example
         timeout-minutes: 20
-        run: flutter drive --no-dds --timeout=1200 -d macos --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
+        run: flutter test integration_test/format_compatibility_test.dart -d macos
 
   validate-android:
     name: Validate Android release
