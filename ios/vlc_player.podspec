@@ -18,7 +18,7 @@ A Flutter plugin for video playback using VideoLAN VLCKit.
   s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}
 
   s.dependency 'Flutter'
-  s.dependency 'MobileVLCKit'
+  s.dependency 'MobileVLCKit', '3.7.3'
 
   s.platform = :ios, '13.0'
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }

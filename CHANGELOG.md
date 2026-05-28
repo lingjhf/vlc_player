@@ -12,6 +12,8 @@
 - Moved iOS and macOS Swift sources to the Flutter 3.44 plugin source layout
   while keeping the official CocoaPods `MobileVLCKit` and `VLCKit`
   dependencies.
+- Pinned official Apple VLCKit CocoaPods to `3.7.3` to keep CI dependency
+  resolution deterministic and avoid excessive CocoaPods spec lookups.
 
 ## 2.0.1 - 2026-05-19
 

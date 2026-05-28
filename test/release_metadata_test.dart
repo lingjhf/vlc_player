@@ -29,8 +29,8 @@ void main() {
 
   test('podspec metadata uses project owner and Flutter 3.44 source layout', () {
     final podspecs = <String, String>{
-      'ios/vlc_player.podspec': 'MobileVLCKit',
-      'macos/vlc_player.podspec': 'VLCKit',
+      'ios/vlc_player.podspec': "s.dependency 'MobileVLCKit', '3.7.3'",
+      'macos/vlc_player.podspec': "s.dependency 'VLCKit', '3.7.3'",
     };
 
     for (final entry in podspecs.entries) {
@@ -59,7 +59,7 @@ void main() {
           "s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}",
         ),
       );
-      expect(podspec, contains("s.dependency '${entry.value}'"));
+      expect(podspec, contains(entry.value));
     }
   });
 
