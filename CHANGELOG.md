@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.1.2 - 2026-05-28
+
+### Fixed
+
+- Restored Android video output after the app moves to the background and is
+  brought back to the foreground.
+
+### Added
+
+- Added an Android lifecycle integration test that backgrounds the example app,
+  resumes it, and verifies that video pixels are visible again.
+
 ## 2.1.1 - 2026-05-28
 
 ### Changed

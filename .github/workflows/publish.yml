@@ -115,6 +115,7 @@ jobs:
           working-directory: example
           script: |
             flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
+            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/android_lifecycle_test.dart
             flutter drive --no-dds --timeout=1200 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   validate-windows:

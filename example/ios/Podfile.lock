@@ -3,7 +3,7 @@ PODS:
   - integration_test (0.0.1):
     - Flutter
   - MobileVLCKit (3.7.3)
-  - vlc_player (2.1.1):
+  - vlc_player (2.1.2):
     - Flutter
     - MobileVLCKit (= 3.7.3)
 
