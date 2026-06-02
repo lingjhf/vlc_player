@@ -27,6 +27,12 @@ void main() {
     );
   });
 
+  test('pubspec description satisfies pub.dev length guidance', () {
+    final description = _pubspecDescription();
+
+    expect(description.length, inInclusiveRange(50, 180));
+  });
+
   test('podspec metadata uses project owner and Flutter 3.44 source layout', () {
     final podspecs = <String, String>{
       'ios/vlc_player.podspec': "s.dependency 'MobileVLCKit', '3.7.3'",
@@ -100,6 +106,24 @@ String _pubspecVersion() {
     fail('pubspec.yaml does not define a package version.');
   }
   return match.group(1)!;
+}
+
+String _pubspecDescription() {
+  final match = RegExp(
+    r'^description:\s*(.+)$',
+    multiLine: true,
+  ).firstMatch(_fileText('pubspec.yaml'));
+  if (match == null) {
+    fail('pubspec.yaml does not define a package description.');
+  }
+
+  final rawDescription = match.group(1)!.trim();
+  if (rawDescription.length >= 2 &&
+      ((rawDescription.startsWith('"') && rawDescription.endsWith('"')) ||
+          (rawDescription.startsWith("'") && rawDescription.endsWith("'")))) {
+    return rawDescription.substring(1, rawDescription.length - 1);
+  }
+  return rawDescription;
 }
 
 String _fileText(String path) => File(path).readAsStringSync();

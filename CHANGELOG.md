@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.1.3 - 2026-06-02
+
+### Changed
+
+- Expanded the package description in `pubspec.yaml` to satisfy pub.dev
+  metadata scoring requirements.
+
 ## 2.1.2 - 2026-05-28
 
 ### Fixed
