@@ -12,8 +12,11 @@
 #include <flutter/texture_registrar.h>
 
 #include <cstdint>
+#include <mutex>
 #include <memory>
+#include <thread>
 #include <unordered_map>
+#include <vector>
 
 namespace vlc_player {
 
@@ -40,7 +43,7 @@ class VlcPlayerPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
  private:
-  WindowsVlcPlayer *FindPlayer(
+  std::shared_ptr<WindowsVlcPlayer> FindPlayer(
       const flutter::EncodableMap &arguments,
       flutter::MethodResult<flutter::EncodableValue> *result);
 
@@ -50,7 +53,10 @@ class VlcPlayerPlugin : public flutter::Plugin {
   flutter::TextureRegistrar *texture_registrar_;
   FlutterDesktopMessengerRef messenger_ref_;
   int64_t next_view_id_ = 1;
-  std::unordered_map<int64_t, std::unique_ptr<WindowsVlcPlayer>> players_;
+  std::mutex players_mutex_;
+  std::unordered_map<int64_t, std::shared_ptr<WindowsVlcPlayer>> players_;
+  std::vector<std::thread> create_threads_;
+  std::vector<std::thread> dispose_threads_;
 };
 
 }  // namespace vlc_player
