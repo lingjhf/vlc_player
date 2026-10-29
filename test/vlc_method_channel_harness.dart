@@ -8,6 +8,14 @@ class VlcMethodChannelHarness {
 
   final List<MethodCall> calls = <MethodCall>[];
   final List<EventChannel> _eventChannels = <EventChannel>[];
+  final Map<VlcPlayerController, VlcPlayerBinding> _bindings = {};
+
+  VlcPlayerBinding bindingFor(VlcPlayerController controller) {
+    final binding = _bindings[controller];
+    if (binding != null && !binding.isDisposed) return binding;
+    return _bindings[controller] = (controller as VlcPlayerControllerInternals)
+        .createBinding();
+  }
 
   void install({Future<Object?> Function(MethodCall call)? onCall}) {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -18,15 +26,15 @@ class VlcMethodChannelHarness {
   }
 
   Future<void> attachController(VlcPlayerController controller, int viewId) {
-    return (controller as VlcPlayerControllerInternals).attach(viewId);
+    return bindingFor(controller).attach(viewId);
   }
 
   Future<int> attachTexturePlayer(VlcPlayerController controller) {
-    return (controller as VlcPlayerControllerInternals).attachTexturePlayer();
+    return bindingFor(controller).attachTexturePlayer();
   }
 
   Future<void> detachController(VlcPlayerController controller) {
-    return (controller as VlcPlayerControllerInternals).detach();
+    return _bindings.remove(controller)?.dispose() ?? Future<void>.value();
   }
 
   void mockEventChannel(int viewId) {

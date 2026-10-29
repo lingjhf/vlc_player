@@ -182,6 +182,132 @@ void main() {
     });
   });
 
+  testWidgets('late texture creation cannot detach a reused controller', (
+    WidgetTester tester,
+  ) async {
+    await runAsWindows(() async {
+      final first = VlcPlayerController();
+      final second = VlcPlayerController();
+      final oldCreate = Completer<Map<String, Object?>>();
+      var creates = 0;
+      final calls = <MethodCall>[];
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methodChannel, (call) async {
+            calls.add(call);
+            if (call.method == 'create') {
+              final id = ++creates;
+              if (id == 1) return oldCreate.future;
+              mockEventChannel(id);
+              return {'viewId': id, 'textureId': id + 100};
+            }
+            return null;
+          });
+      Future<void> show(VlcPlayerController controller) => tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: VlcPlayer(controller: controller),
+        ),
+      );
+      await show(first);
+      await tester.pump();
+      await show(second);
+      await tester.pump();
+      await show(first);
+      await tester.pump();
+      oldCreate.complete({'viewId': 1, 'textureId': 101});
+      await tester.pump();
+      await tester.pump();
+      expect(first.isAttached, isTrue);
+      expect(tester.widget<Texture>(find.byType(Texture)).textureId, 103);
+      await first.play();
+      expect(calls.last.arguments, {'viewId': 3});
+      expect(
+        calls
+            .where((call) => call.method == 'dispose')
+            .map((call) => call.arguments),
+        contains(equals({'viewId': 1})),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      first.dispose();
+      second.dispose();
+    });
+  });
+
+  testWidgets('a stale platform callback cannot attach to a new controller', (
+    WidgetTester tester,
+  ) async {
+    await runAsPlatform(TargetPlatform.android, () async {
+      final calls = recordPluginCalls();
+      final platformViews = _PlatformViewsRecorder(onCreate: mockEventChannel)
+        ..install();
+      final first = VlcPlayerController();
+      final second = VlcPlayerController();
+      await tester.pumpWidget(MaterialApp(home: VlcPlayer(controller: first)));
+      await tester.pump();
+      final oldView = tester.widget<AndroidView>(find.byType(AndroidView));
+      await tester.pumpWidget(MaterialApp(home: VlcPlayer(controller: second)));
+      await tester.pump();
+      oldView.onPlatformViewCreated!(999);
+      await tester.pump();
+      expect(first.isAttached, isFalse);
+      expect(second.isAttached, isTrue);
+      await second.play();
+      expect(calls.last.arguments, {
+        'viewId': platformViews.createdViews.last.id,
+      });
+      expect(
+        calls
+            .where((call) => call.method == 'dispose')
+            .map((call) => call.arguments),
+        contains(equals({'viewId': 999})),
+      );
+      await tester.pumpWidget(const SizedBox.shrink());
+      first.dispose();
+      second.dispose();
+    });
+  });
+
+  testWidgets('sharing a controller reports ownership without cleanup errors', (
+    WidgetTester tester,
+  ) async {
+    await runAsWindows(() async {
+      final controller = VlcPlayerController();
+      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .setMockMethodCallHandler(methodChannel, (call) async {
+            if (call.method == 'create') {
+              mockEventChannel(1);
+              return {'viewId': 1, 'textureId': 101};
+            }
+            return null;
+          });
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Column(
+            children: [
+              SizedBox(
+                width: 200,
+                height: 100,
+                child: VlcPlayer(controller: controller),
+              ),
+              SizedBox(
+                width: 200,
+                height: 100,
+                child: VlcPlayer(controller: controller),
+              ),
+            ],
+          ),
+        ),
+      );
+      expect(find.textContaining('one VlcPlayer at a time'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+      controller.dispose();
+    });
+  });
+
   testWidgets('shows a loading indicator while a texture is created', (
     WidgetTester tester,
   ) async {

@@ -30,6 +30,7 @@ enum VlcVideoFit {
 /// The widget creates a platform view on Android, iOS, and macOS, and a
 /// texture-backed player on Windows and Linux. The owning widget should dispose
 /// the [controller] when playback is no longer needed.
+/// A controller can belong to only one mounted player widget at a time.
 class VlcPlayer extends StatefulWidget {
   /// Creates a VLC player widget controlled by [controller].
   const VlcPlayer({
@@ -54,37 +55,29 @@ class VlcPlayer extends StatefulWidget {
 
 class _VlcPlayerState extends State<VlcPlayer> {
   Future<int>? _textureId;
-  int _textureGeneration = 0;
-  bool _isDisposed = false;
+  VlcPlayerBinding? _binding;
+  StateError? _bindingError;
 
   @override
   void initState() {
     super.initState();
-    if (_usesTexturePlayer) {
-      _textureId = _attachTexturePlayer(widget.controller);
-    }
+    _bindController();
   }
 
   @override
   void didUpdateWidget(VlcPlayer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller == widget.controller) {
+    if (oldWidget.controller == widget.controller &&
+        (_usesTexturePlayer || oldWidget.fit == widget.fit)) {
       return;
     }
-
-    if (_usesTexturePlayer) {
-      _textureId = _attachTexturePlayer(widget.controller);
-      unawaited(_detachPlayer(oldWidget.controller));
-    } else {
-      unawaited(_detachPlayer(oldWidget.controller));
-    }
+    unawaited(_binding?.dispose());
+    _bindController();
   }
 
   @override
   void dispose() {
-    _isDisposed = true;
-    _textureGeneration++;
-    unawaited(_detachPlayer(widget.controller));
+    unawaited(_binding?.dispose());
     super.dispose();
   }
 
@@ -95,6 +88,15 @@ class _VlcPlayerState extends State<VlcPlayer> {
 
   @override
   Widget build(BuildContext context) {
+    final binding = _binding;
+    if (binding == null) {
+      return ColoredBox(
+        color: widget.backgroundColor,
+        child: Center(
+          child: Text(_bindingError.toString(), textAlign: TextAlign.center),
+        ),
+      );
+    }
     if (defaultTargetPlatform == TargetPlatform.android) {
       return ColoredBox(
         color: widget.backgroundColor,
@@ -106,7 +108,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
             'fit': widget.fit.name,
           },
           creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: _handlePlatformViewCreated,
+          onPlatformViewCreated: (id) => _attachPlatformView(binding, id),
         ),
       );
     }
@@ -122,7 +124,7 @@ class _VlcPlayerState extends State<VlcPlayer> {
             'fit': widget.fit.name,
           },
           creationParamsCodec: const StandardMessageCodec(),
-          onPlatformViewCreated: _handlePlatformViewCreated,
+          onPlatformViewCreated: (id) => _attachPlatformView(binding, id),
         ),
       );
     }
@@ -177,40 +179,39 @@ class _VlcPlayerState extends State<VlcPlayer> {
           'fit': widget.fit.name,
         },
         creationParamsCodec: const StandardMessageCodec(),
-        onPlatformViewCreated: _handlePlatformViewCreated,
+        onPlatformViewCreated: (id) => _attachPlatformView(binding, id),
       ),
     );
   }
 
-  void _handlePlatformViewCreated(int viewId) {
-    unawaited(_attachPlatformView(widget.controller, viewId));
+  void _attachPlatformView(VlcPlayerBinding binding, int viewId) {
+    unawaited(() async {
+      try {
+        await binding.attach(viewId);
+      } catch (_) {
+        if (!binding.isDisposed) rethrow;
+      }
+    }());
   }
 
   String get _platformViewKey {
     return '${identityHashCode(widget.controller)}-${widget.fit.name}';
   }
 
-  Future<int> _attachTexturePlayer(VlcPlayerController controller) async {
-    final generation = ++_textureGeneration;
-    final textureId = await _attachTextureBackedPlayer(controller);
-    if (_isDisposed ||
-        generation != _textureGeneration ||
-        widget.controller != controller) {
-      await _detachPlayer(controller);
+  VlcPlayerBinding _claimController() {
+    return (widget.controller as VlcPlayerControllerInternals).createBinding();
+  }
+
+  void _bindController() {
+    try {
+      _binding = _claimController();
+      _bindingError = null;
+      if (_usesTexturePlayer) _textureId = _binding!.attachTexturePlayer();
+    } on StateError catch (error) {
+      _binding = null;
+      _bindingError = error;
+      _textureId = null;
     }
-    return textureId;
-  }
-
-  Future<void> _attachPlatformView(VlcPlayerController controller, int viewId) {
-    return (controller as VlcPlayerControllerInternals).attach(viewId);
-  }
-
-  Future<int> _attachTextureBackedPlayer(VlcPlayerController controller) {
-    return (controller as VlcPlayerControllerInternals).attachTexturePlayer();
-  }
-
-  Future<void> _detachPlayer(VlcPlayerController controller) {
-    return (controller as VlcPlayerControllerInternals).detach();
   }
 
   Widget _fitTexture(int textureId, Size? videoSize) {

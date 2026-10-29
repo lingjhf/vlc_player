@@ -442,9 +442,20 @@ internal class VlcPlayerPlatformView(
                 updateState(STATE_OPENING)
             }
             MediaPlayer.Event.Buffering -> {
-                bufferingProgress =
-                    event.getBuffering().coerceIn(0.0f, 100.0f).toDouble() / 100.0
-                updateState(STATE_BUFFERING)
+                val progress = event.getBuffering().coerceIn(0.0f, 100.0f).toDouble() / 100.0
+                if (progress < 1.0) {
+                    bufferingProgress = progress
+                    updateState(STATE_BUFFERING)
+                } else {
+                    // VLC can send Buffering(100) after Playing. Finishing a
+                    // buffer must not overwrite active playback or a pause.
+                    bufferingProgress = null
+                    if (mediaPlayer.isPlaying) {
+                        updateState(STATE_PLAYING)
+                    } else {
+                        sendSnapshot()
+                    }
+                }
             }
             MediaPlayer.Event.Playing -> {
                 bufferingProgress = null
