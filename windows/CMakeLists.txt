@@ -23,6 +23,7 @@ list(APPEND PLUGIN_SOURCES
   "../src/native/vlc_player_types.h"
   "vlc_player_plugin.cpp"
   "vlc_player_plugin.h"
+  "windows_player_task_runner.h"
 )
 
 # Define the plugin library target. Its name must not be changed (see comment
@@ -189,10 +190,13 @@ FetchContent_MakeAvailable(googletest)
 # directly into the test binary rather than using the DLL.
 add_executable(${TEST_RUNNER}
   test/vlc_player_plugin_test.cpp
+  test/vlc_player_lifecycle_test.cpp
   ${PLUGIN_SOURCES}
 )
 apply_standard_settings(${TEST_RUNNER})
 target_compile_definitions(${TEST_RUNNER} PRIVATE VLC_PLAYER_TESTING)
+target_compile_definitions(${TEST_RUNNER} PRIVATE
+  VLC_PLAYER_TEST_MEDIA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../example/assets/format_fixtures/video.mp4")
 target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(${TEST_RUNNER} PRIVATE
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/native"
@@ -224,5 +228,5 @@ endforeach()
 
 # Enable automatic test discovery.
 include(GoogleTest)
-gtest_discover_tests(${TEST_RUNNER})
+gtest_discover_tests(${TEST_RUNNER} DISCOVERY_TIMEOUT 60)
 endif()

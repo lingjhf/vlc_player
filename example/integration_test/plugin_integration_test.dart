@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:vlc_player/vlc_player.dart';
@@ -74,6 +75,7 @@ void main() {
       tester,
       () => controller.isAttached,
       description: 'native player attachment',
+      attempts: nativePlayerAttachmentAttempts,
     );
     expect(controller.isAttached, isTrue);
     expect(tester.takeException(), isNull);
@@ -97,4 +99,39 @@ void main() {
 
     expect(find.byIcon(Icons.stay_current_portrait), findsOneWidget);
   });
+
+  testWidgets(
+    'Windows async creation recovers from errors and repeated disposal',
+    (WidgetTester tester) async {
+      if (!Platform.isWindows) {
+        return;
+      }
+
+      const channel = MethodChannel('vlc_player');
+      for (var iteration = 0; iteration < 8; iteration++) {
+        await expectLater(
+          channel.invokeMethod<Object?>('create', <String, Object?>{
+            'options': <String>['--vlc-player-test-invalid-option'],
+          }),
+          throwsA(
+            isA<PlatformException>().having(
+              (error) => error.code,
+              'code',
+              'create_failed',
+            ),
+          ),
+        );
+
+        final player = await channel.invokeMapMethod<String, Object?>(
+          'create',
+          <String, Object?>{'options': headlessPlayerOptions()},
+        );
+        expect(player?['viewId'], isA<int>());
+        expect(player?['textureId'], isA<int>());
+        final arguments = <String, Object?>{'viewId': player!['viewId']};
+        await channel.invokeMethod<void>('dispose', arguments);
+        await channel.invokeMethod<void>('dispose', arguments);
+      }
+    },
+  );
 }

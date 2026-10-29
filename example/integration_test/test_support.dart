@@ -4,6 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+// Async initialization keeps Flutter frames running while Windows performs a
+// cold libVLC plugin scan. Keep shorter waits on the other platforms.
+int get nativePlayerAttachmentAttempts => Platform.isWindows ? 480 : 40;
+
 Future<void> pumpNavigation(WidgetTester tester) async {
   await tester.pump();
   await tester.pumpAndSettle(

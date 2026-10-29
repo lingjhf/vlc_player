@@ -174,6 +174,7 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
     tester,
     () => controller.isAttached,
     description: 'native player attachment for ${format.name}',
+    attempts: nativePlayerAttachmentAttempts,
   );
   expect(controller.isAttached, isTrue);
 

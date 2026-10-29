@@ -13,11 +13,13 @@
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <unordered_map>
 
 namespace vlc_player {
 
 class WindowsVlcPlayer;
+class WindowsPlayerTaskRunner;
 
 class VlcPlayerPlugin : public flutter::Plugin {
  public:
@@ -40,7 +42,7 @@ class VlcPlayerPlugin : public flutter::Plugin {
       std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
 
  private:
-  WindowsVlcPlayer *FindPlayer(
+  std::shared_ptr<WindowsVlcPlayer> FindPlayer(
       const flutter::EncodableMap &arguments,
       flutter::MethodResult<flutter::EncodableValue> *result);
 
@@ -50,7 +52,10 @@ class VlcPlayerPlugin : public flutter::Plugin {
   flutter::TextureRegistrar *texture_registrar_;
   FlutterDesktopMessengerRef messenger_ref_;
   int64_t next_view_id_ = 1;
-  std::unordered_map<int64_t, std::unique_ptr<WindowsVlcPlayer>> players_;
+  bool shutting_down_ = false;
+  std::mutex players_mutex_;
+  std::unordered_map<int64_t, std::shared_ptr<WindowsVlcPlayer>> players_;
+  std::unique_ptr<WindowsPlayerTaskRunner> task_runner_;
 };
 
 }  // namespace vlc_player
