@@ -9,6 +9,8 @@ import 'vlc_media_source.dart';
 import 'vlc_media_stats.dart';
 import 'vlc_player_controller_internals.dart';
 import 'vlc_player_error.dart';
+import 'vlc_player_operation_queue.dart';
+import 'vlc_player_session.dart';
 import 'vlc_player_value.dart';
 
 /// Playlist repeat behavior used by `VlcPlayerController.setPlaylist`.
@@ -29,6 +31,10 @@ enum VlcPlaylistLoopMode {
 /// [setMedia] or [setPlaylist] are remembered and applied when the native
 /// player is created. Playback commands such as [play] and [pause] require the
 /// controller to be attached to a `VlcPlayer`.
+///
+/// A controller belongs to one mounted `VlcPlayer` at a time. Media and playlist
+/// changes run in invocation order, including failure rollback. Await their
+/// futures to observe completion or loading errors.
 abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// Creates a controller.
   ///
@@ -248,21 +254,24 @@ class _VlcPlayerController extends VlcPlayerController
   @override
   final Duration? eventThrottleInterval;
 
-  int? _viewId;
-  int? _textureId;
+  VlcPlayerSession? _session;
+  final _mediaOperations = VlcPlayerOperationQueue();
+  // Requested changes also invalidate errors from older automatic transitions.
+  int _mediaIntent = 0;
   VlcMediaSource? _pendingMediaSource;
   bool _pendingAutoPlay = false;
   List<VlcMediaSource> _playlist = const <VlcMediaSource>[];
   int? _playlistIndex;
   bool _playlistAutoAdvance = false;
   VlcPlaylistLoopMode _playlistLoopMode = VlcPlaylistLoopMode.none;
-  StreamSubscription<Object?>? _eventsSubscription;
   Timer? _eventThrottleTimer;
   VlcPlayerValue? _pendingThrottledValue;
   bool _isDisposed = false;
 
   @override
-  bool get isAttached => _viewId != null;
+  bool get isAttached => _session?.viewId != null;
+
+  int? get _viewId => _session?.viewId;
 
   @override
   List<VlcMediaSource> get playlist => _playlist;
@@ -288,126 +297,67 @@ class _VlcPlayerController extends VlcPlayerController
     null => false,
   };
 
-  /// Attaches this controller to a platform-view player instance.
   @override
-  Future<void> attach(int viewId) async {
+  VlcPlayerBinding createBinding() {
     _ensureNotDisposed();
-    if (_viewId == viewId) {
-      return;
+    if (_session case final session? when !session.isDisposed) {
+      throw StateError(
+        'A controller can only belong to one VlcPlayer at a time.',
+      );
     }
-
-    final oldViewId = _viewId;
-    _viewId = null;
-    _textureId = null;
-    await _eventsSubscription?.cancel();
-    _eventsSubscription = null;
-    _cancelPendingThrottledValue();
-    if (oldViewId != null) {
-      await _disposeNativeView(oldViewId);
-    }
-    if (_isDisposed) {
-      await _disposeNativeView(viewId);
-      throw StateError('The controller has been disposed.');
-    }
-
-    _viewId = viewId;
-    _eventsSubscription = EventChannel(
-      'vlc_player/events/$viewId',
-    ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
-
-    final pendingMediaSource = _pendingMediaSource;
-    if (pendingMediaSource != null) {
-      await _setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
-      _ensureNotDisposed();
-    }
+    late final VlcPlayerSession session;
+    session = VlcPlayerSession(
+      createPlayer: () => _invokeNativeMap('create', {'options': options}),
+      disposePlayer: _disposeNativeView,
+      onAttached: (viewId) => _mediaOperations.run(() async {
+        _ensureNotDisposed();
+        if (!identical(_session, session) || session.viewId != viewId) return;
+        final source = _pendingMediaSource;
+        if (source != null) {
+          await _setMedia(source, autoPlay: _pendingAutoPlay);
+        }
+      }),
+      onDetached: () {
+        if (identical(_session, session)) _cancelPendingThrottledValue();
+      },
+      onEvent: _handleEvent,
+      onError: _handleEventError,
+    );
+    _session = session;
+    return session;
   }
 
-  /// Attaches this controller to a texture-backed player instance.
-  @override
-  @internal
-  Future<int> attachTexturePlayer() async {
-    _ensureNotDisposed();
-
-    final existingTextureId = _textureId;
-    if (_viewId != null && existingTextureId != null) {
-      return existingTextureId;
-    }
-
-    final oldViewId = _viewId;
-    _viewId = null;
-    _textureId = null;
-    await _eventsSubscription?.cancel();
-    _eventsSubscription = null;
-    _cancelPendingThrottledValue();
-    if (oldViewId != null) {
-      await _disposeNativeView(oldViewId);
-    }
-    _ensureNotDisposed();
-
-    final response = await _invokeNativeMap('create', <String, Object?>{
-      'options': options,
+  Future<T> _changeMedia<T>(Future<T> Function() operation) {
+    ++_mediaIntent;
+    return _mediaOperations.run(() async {
+      _ensureNotDisposed();
+      return operation();
     });
-    final viewId = (response?['viewId'] as num?)?.toInt();
-    final textureId = (response?['textureId'] as num?)?.toInt();
-    if (viewId == null || textureId == null) {
-      throw StateError('vlc_player texture creation returned invalid data.');
-    }
-    if (_isDisposed) {
-      await _disposeNativeView(viewId);
-      throw StateError('The controller has been disposed.');
-    }
-
-    _viewId = viewId;
-    _textureId = textureId;
-    _eventsSubscription = EventChannel(
-      'vlc_player/events/$viewId',
-    ).receiveBroadcastStream().listen(_handleEvent, onError: _handleEventError);
-
-    final pendingMediaSource = _pendingMediaSource;
-    if (pendingMediaSource != null) {
-      await _setMedia(pendingMediaSource, autoPlay: _pendingAutoPlay);
-      _ensureNotDisposed();
-    }
-
-    return textureId;
-  }
-
-  /// Detaches and disposes the native player instance, if one is attached.
-  @override
-  @internal
-  Future<void> detach() async {
-    final viewId = _viewId;
-    _viewId = null;
-    _textureId = null;
-    await _eventsSubscription?.cancel();
-    _eventsSubscription = null;
-    _cancelPendingThrottledValue();
-    if (viewId != null) {
-      await _disposeNativeView(viewId);
-    }
   }
 
   @override
   Future<void> setMedia(VlcMediaSource source, {bool autoPlay = false}) async {
-    _ensureNotDisposed();
-    final previousPlaylist = _playlist;
-    final previousPlaylistIndex = _playlistIndex;
-    final previousPlaylistAutoAdvance = _playlistAutoAdvance;
-    final previousPlaylistLoopMode = _playlistLoopMode;
-    final previousMediaSource = _pendingMediaSource;
-    final previousAutoPlay = _pendingAutoPlay;
-    _clearPlaylist();
-    try {
-      await _setMedia(source, autoPlay: autoPlay);
-    } catch (_) {
-      _playlist = previousPlaylist;
-      _playlistIndex = previousPlaylistIndex;
-      _playlistAutoAdvance = previousPlaylistAutoAdvance;
-      _playlistLoopMode = previousPlaylistLoopMode;
-      _pendingMediaSource = previousMediaSource;
-      _pendingAutoPlay = previousAutoPlay;
-      rethrow;
-    }
+    return _changeMedia(() async {
+      _ensureNotDisposed();
+      final previousPlaylist = _playlist;
+      final previousPlaylistIndex = _playlistIndex;
+      final previousPlaylistAutoAdvance = _playlistAutoAdvance;
+      final previousPlaylistLoopMode = _playlistLoopMode;
+      final previousMediaSource = _pendingMediaSource;
+      final previousAutoPlay = _pendingAutoPlay;
+      _clearPlaylist();
+      try {
+        await _setMedia(source, autoPlay: autoPlay);
+      } catch (_) {
+        _playlist = previousPlaylist;
+        _playlistIndex = previousPlaylistIndex;
+        _playlistAutoAdvance = previousPlaylistAutoAdvance;
+        _playlistLoopMode = previousPlaylistLoopMode;
+        _pendingMediaSource = previousMediaSource;
+        _pendingAutoPlay = previousAutoPlay;
+        rethrow;
+      }
+    });
   }
 
   @override
@@ -418,62 +368,75 @@ class _VlcPlayerController extends VlcPlayerController
     bool autoAdvance = true,
     VlcPlaylistLoopMode loopMode = VlcPlaylistLoopMode.none,
   }) async {
-    _ensureNotDisposed();
-    if (sources.isEmpty) {
-      throw ArgumentError.value(sources, 'sources', 'Must be non-empty.');
-    }
-    RangeError.checkValidIndex(initialIndex, sources, 'initialIndex');
+    final playlist = List<VlcMediaSource>.unmodifiable(sources);
+    return _changeMedia(() async {
+      _ensureNotDisposed();
+      if (playlist.isEmpty) {
+        throw ArgumentError.value(sources, 'sources', 'Must be non-empty.');
+      }
+      RangeError.checkValidIndex(initialIndex, playlist, 'initialIndex');
 
-    final previousPlaylist = _playlist;
-    final previousPlaylistIndex = _playlistIndex;
-    final previousPlaylistAutoAdvance = _playlistAutoAdvance;
-    final previousPlaylistLoopMode = _playlistLoopMode;
-    final previousMediaSource = _pendingMediaSource;
-    final previousAutoPlay = _pendingAutoPlay;
-    _playlist = List<VlcMediaSource>.unmodifiable(sources);
-    _playlistIndex = initialIndex;
-    _playlistAutoAdvance = autoAdvance;
-    _playlistLoopMode = loopMode;
-    try {
-      await _setMedia(_playlist[initialIndex], autoPlay: autoPlay);
-    } catch (_) {
-      _playlist = previousPlaylist;
-      _playlistIndex = previousPlaylistIndex;
-      _playlistAutoAdvance = previousPlaylistAutoAdvance;
-      _playlistLoopMode = previousPlaylistLoopMode;
-      _pendingMediaSource = previousMediaSource;
-      _pendingAutoPlay = previousAutoPlay;
-      rethrow;
-    }
+      final previousPlaylist = _playlist;
+      final previousPlaylistIndex = _playlistIndex;
+      final previousPlaylistAutoAdvance = _playlistAutoAdvance;
+      final previousPlaylistLoopMode = _playlistLoopMode;
+      final previousMediaSource = _pendingMediaSource;
+      final previousAutoPlay = _pendingAutoPlay;
+      _playlist = playlist;
+      _playlistIndex = initialIndex;
+      _playlistAutoAdvance = autoAdvance;
+      _playlistLoopMode = loopMode;
+      try {
+        await _setMedia(_playlist[initialIndex], autoPlay: autoPlay);
+      } catch (_) {
+        _playlist = previousPlaylist;
+        _playlistIndex = previousPlaylistIndex;
+        _playlistAutoAdvance = previousPlaylistAutoAdvance;
+        _playlistLoopMode = previousPlaylistLoopMode;
+        _pendingMediaSource = previousMediaSource;
+        _pendingAutoPlay = previousAutoPlay;
+        rethrow;
+      }
+    });
   }
 
   @override
   Future<bool> next({bool autoPlay = true}) {
-    return _moveInPlaylist(1, autoPlay: autoPlay);
+    return _changeMedia(() => _moveInPlaylist(1, autoPlay: autoPlay));
   }
 
   @override
   Future<bool> previous({bool autoPlay = true}) {
-    return _moveInPlaylist(-1, autoPlay: autoPlay);
+    return _changeMedia(() => _moveInPlaylist(-1, autoPlay: autoPlay));
   }
 
   @override
   Future<void> jumpTo(int index, {bool autoPlay = true}) async {
-    _ensureActivePlaylist();
-    RangeError.checkValidIndex(index, _playlist, 'index');
-    if (index == _playlistIndex) {
-      return;
-    }
-    await _loadPlaylistIndex(index, autoPlay: autoPlay);
+    return _changeMedia(() async {
+      _ensureActivePlaylist();
+      RangeError.checkValidIndex(index, _playlist, 'index');
+      if (index == _playlistIndex) {
+        return;
+      }
+      await _loadPlaylistIndex(index, autoPlay: autoPlay);
+    });
   }
 
   @override
   Future<void> addToPlaylist(VlcMediaSource source) {
-    return insertIntoPlaylist(_playlist.length, source);
+    return _changeMedia(() async {
+      _insertIntoPlaylist(_playlist.length, source);
+    });
   }
 
   @override
-  Future<void> insertIntoPlaylist(int index, VlcMediaSource source) async {
+  Future<void> insertIntoPlaylist(int index, VlcMediaSource source) {
+    return _changeMedia(() async {
+      _insertIntoPlaylist(index, source);
+    });
+  }
+
+  void _insertIntoPlaylist(int index, VlcMediaSource source) {
     _ensureActivePlaylist();
     RangeError.checkValueInInterval(index, 0, _playlist.length, 'index');
     final currentIndex = _playlistIndex!;
@@ -486,72 +449,78 @@ class _VlcPlayerController extends VlcPlayerController
 
   @override
   Future<void> removeFromPlaylistAt(int index, {bool autoPlay = true}) async {
-    _ensureActivePlaylist();
-    RangeError.checkValidIndex(index, _playlist, 'index');
+    return _changeMedia(() async {
+      _ensureActivePlaylist();
+      RangeError.checkValidIndex(index, _playlist, 'index');
 
-    final previousPlaylist = _playlist;
-    final previousPlaylistIndex = _playlistIndex;
-    final previousMediaSource = _pendingMediaSource;
-    final previousAutoPlay = _pendingAutoPlay;
-    final currentIndex = previousPlaylistIndex!;
-    final nextPlaylist = <VlcMediaSource>[..._playlist]..removeAt(index);
+      final previousPlaylist = _playlist;
+      final previousPlaylistIndex = _playlistIndex;
+      final previousMediaSource = _pendingMediaSource;
+      final previousAutoPlay = _pendingAutoPlay;
+      final currentIndex = previousPlaylistIndex!;
+      final nextPlaylist = <VlcMediaSource>[..._playlist]..removeAt(index);
 
-    if (nextPlaylist.isEmpty) {
-      await _stopIfAttached();
-      _clearPlaylist();
-      _pendingMediaSource = null;
-      _pendingAutoPlay = false;
-      return;
-    }
+      if (nextPlaylist.isEmpty) {
+        await _stopIfAttached();
+        _clearPlaylist();
+        _pendingMediaSource = null;
+        _pendingAutoPlay = false;
+        return;
+      }
 
-    _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
-    if (index < currentIndex) {
-      _playlistIndex = currentIndex - 1;
-      return;
-    }
-    if (index > currentIndex) {
-      _playlistIndex = currentIndex;
-      return;
-    }
+      _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
+      if (index < currentIndex) {
+        _playlistIndex = currentIndex - 1;
+        return;
+      }
+      if (index > currentIndex) {
+        _playlistIndex = currentIndex;
+        return;
+      }
 
-    final nextIndex = math.min(index, nextPlaylist.length - 1);
-    _playlistIndex = nextIndex;
-    try {
-      await _setMedia(_playlist[nextIndex], autoPlay: autoPlay);
-    } catch (_) {
-      _playlist = previousPlaylist;
-      _playlistIndex = previousPlaylistIndex;
-      _pendingMediaSource = previousMediaSource;
-      _pendingAutoPlay = previousAutoPlay;
-      rethrow;
-    }
+      final nextIndex = math.min(index, nextPlaylist.length - 1);
+      _playlistIndex = nextIndex;
+      try {
+        await _setMedia(_playlist[nextIndex], autoPlay: autoPlay);
+      } catch (_) {
+        _playlist = previousPlaylist;
+        _playlistIndex = previousPlaylistIndex;
+        _pendingMediaSource = previousMediaSource;
+        _pendingAutoPlay = previousAutoPlay;
+        rethrow;
+      }
+    });
   }
 
   @override
   Future<void> clearPlaylist() async {
-    _ensureNotDisposed();
-    if (_playlistIndex == null) {
-      return;
-    }
-    await _stopIfAttached();
-    _clearPlaylist();
-    _pendingMediaSource = null;
-    _pendingAutoPlay = false;
+    return _changeMedia(() async {
+      _ensureNotDisposed();
+      if (_playlistIndex == null) {
+        return;
+      }
+      await _stopIfAttached();
+      _clearPlaylist();
+      _pendingMediaSource = null;
+      _pendingAutoPlay = false;
+    });
   }
 
   @override
   Future<void> shufflePlaylist({int? seed}) async {
-    _ensureActivePlaylist();
-    final currentSource = currentMediaSource;
-    final random = seed == null ? math.Random() : math.Random(seed);
-    final nextPlaylist = <VlcMediaSource>[..._playlist]..shuffle(random);
-    _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
-    _playlistIndex = currentSource == null
-        ? 0
-        : _playlist
-              .indexOf(currentSource)
-              .clamp(0, _playlist.length - 1)
-              .toInt();
+    return _changeMedia(() async {
+      _ensureActivePlaylist();
+      final currentSource = currentMediaSource;
+      final random = seed == null ? math.Random() : math.Random(seed);
+      final nextPlaylist = <VlcMediaSource>[..._playlist]..shuffle(random);
+      _playlist = List<VlcMediaSource>.unmodifiable(nextPlaylist);
+      _playlistIndex = currentSource == null
+          ? 0
+          : _playlist
+                .indexOf(currentSource)
+                .clamp(0, _playlist.length - 1)
+                .toInt();
+    });
   }
 
   Future<bool> _moveInPlaylist(int delta, {required bool autoPlay}) async {
@@ -842,16 +811,24 @@ class _VlcPlayerController extends VlcPlayerController
     if (_isDisposed) {
       return;
     }
+    final session = _session;
+    final intent = _mediaIntent;
     final previousValue = _pendingThrottledValue ?? value;
     final nextValue = VlcPlayerValue.fromEvent(event, previousValue);
     _setValueFromEvent(previousValue, nextValue);
-    if (_playlistAutoAdvance &&
+    if (!_isDisposed &&
+        identical(_session, session) &&
+        session?.isDisposed == false &&
+        intent == _mediaIntent &&
+        _playlistAutoAdvance &&
         previousValue.state != VlcPlaybackState.ended &&
         nextValue.state == VlcPlaybackState.ended) {
       if (_playlistLoopMode == VlcPlaylistLoopMode.loopOne) {
         final current = _pendingMediaSource;
         if (current != null) {
-          _runAutoAdvance(_setMedia(current, autoPlay: true));
+          _runAutoAdvance(
+            _changeMedia(() => _setMedia(current, autoPlay: true)),
+          );
         }
       } else if (hasNext || _playlistLoopMode == VlcPlaylistLoopMode.loopAll) {
         _runAutoAdvance(next().then<void>((_) {}));
@@ -860,9 +837,15 @@ class _VlcPlayerController extends VlcPlayerController
   }
 
   void _runAutoAdvance(Future<void> operation) {
+    final session = _session;
+    final intent = _mediaIntent;
     unawaited(
       operation.catchError((Object error, StackTrace stackTrace) {
-        _handleAutoAdvanceError(error);
+        if (identical(_session, session) &&
+            session?.isDisposed == false &&
+            intent == _mediaIntent) {
+          _handleAutoAdvanceError(error);
+        }
       }),
     );
   }
@@ -973,15 +956,10 @@ class _VlcPlayerController extends VlcPlayerController
       return;
     }
     _isDisposed = true;
-    final viewId = _viewId;
-    _viewId = null;
-    _textureId = null;
-    _eventsSubscription?.cancel();
-    _eventsSubscription = null;
+    final session = _session;
+    _session = null;
     _cancelPendingThrottledValue();
-    if (viewId != null) {
-      unawaited(_disposeNativeView(viewId));
-    }
+    if (session != null) unawaited(session.dispose());
     super.dispose();
   }
 }

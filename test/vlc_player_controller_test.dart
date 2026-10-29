@@ -1194,7 +1194,8 @@ void main() {
           harness.attachTexturePlayer(controller),
           throwsStateError,
         );
-        expect(calls.single.method, 'create');
+        expect(calls.map((call) => call.method), ['create', 'dispose']);
+        expect(calls.last.arguments, {'viewId': 25});
 
         controller.dispose();
       },

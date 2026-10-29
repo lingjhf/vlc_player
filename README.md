@@ -146,6 +146,11 @@ class _VideoPageState extends State<VideoPage> {
 Commands such as `play()`, `pause()`, and `seekTo()` require an attached player
 and throw `StateError` if called too early or after disposal.
 
+A controller can belong to one mounted `VlcPlayer` at a time. Unmount the old
+widget before reusing its controller in another widget. Media and playlist
+changes execute in invocation order; a failed change rolls back before the next
+change starts. Await the returned futures to handle individual loading errors.
+
 ### Play an HLS stream
 
 Pass the `.m3u8` playlist URL as the media source:
@@ -589,3 +594,18 @@ flutter build macos
 ```
 
 Also make sure CocoaPods is `1.13.0` or newer.
+
+## Development checks
+
+For session regression checks, run
+`flutter drive -d <device> --driver=test_driver/integration_test.dart --target=integration_test/session_lifecycle_test.dart`
+from `example/`. This verifies red/blue video frames, overlapping source changes,
+and controller reuse. On Android emulators, use
+`--driver=test_driver/android_lifecycle_test.dart` to provide system screenshots.
+CI uses dummy audio output. To verify actual output audio,
+start `tool/verify_session_output.py --help` from the repository root and follow
+its setup instructions, then add
+`--dart-define=VLC_PLAYER_AV_HOST=http://127.0.0.1:45939` to the drive command.
+The host saves recordings and checks 440/880 Hz tones and paused silence without
+using a microphone. Regenerate the fixture with
+`python tool/generate_session_fixture.py --ffmpeg <ffmpeg-path>`.
