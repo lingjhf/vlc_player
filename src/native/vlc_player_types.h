@@ -66,6 +66,7 @@ struct VlcSnapshot {
   bool is_live = false;
   int64_t video_width = 0;
   int64_t video_height = 0;
+  double video_pixel_aspect_ratio = 1.0;
   double buffering_progress = -1.0;
   std::string error_code;
   std::string error_description;
@@ -80,6 +81,7 @@ inline bool operator==(const VlcSnapshot& lhs, const VlcSnapshot& rhs) {
          lhs.is_ready == rhs.is_ready && lhs.is_seekable == rhs.is_seekable &&
          lhs.is_live == rhs.is_live && lhs.video_width == rhs.video_width &&
          lhs.video_height == rhs.video_height &&
+         lhs.video_pixel_aspect_ratio == rhs.video_pixel_aspect_ratio &&
          lhs.buffering_progress == rhs.buffering_progress &&
          lhs.error_code == rhs.error_code &&
          lhs.error_description == rhs.error_description;

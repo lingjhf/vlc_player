@@ -470,6 +470,8 @@ class LinuxVlcPlayer {
                              fl_value_new_bool(snapshot.is_seekable));
     fl_value_set_string_take(event, "isLive",
                              fl_value_new_bool(snapshot.is_live));
+    fl_value_set_string_take(event, "videoPixelAspectRatio",
+                             fl_value_new_float(snapshot.video_pixel_aspect_ratio));
     if (snapshot.video_width > 0 && snapshot.video_height > 0) {
       FlValue* video_size = fl_value_new_map();
       fl_value_set_string_take(video_size, "width",

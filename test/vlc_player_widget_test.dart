@@ -428,6 +428,116 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   });
+
+  testWidgets('texture fit scales and clips inside its player bounds', (
+    WidgetTester tester,
+  ) async {
+    for (final platform in [TargetPlatform.windows, TargetPlatform.linux]) {
+      await runAsPlatform(platform, () async {
+        final controller = VlcPlayerController();
+        final playerKey = GlobalKey();
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .setMockMethodCallHandler(methodChannel, (call) async {
+              if (call.method == 'create') {
+                mockEventChannel(9);
+                return <String, Object?>{'viewId': 9, 'textureId': 44};
+              }
+              return null;
+            });
+        Future<void> mount(VlcVideoFit fit) async {
+          await tester.pumpWidget(
+            MaterialApp(
+              home: Center(
+                child: SizedBox(
+                  width: 320,
+                  height: 240,
+                  child: VlcPlayer(
+                    key: playerKey,
+                    controller: controller,
+                    fit: fit,
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pump();
+        }
+
+        await mount(VlcVideoFit.contain);
+        const channel = EventChannel('vlc_player/events/9');
+        await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeSuccessEnvelope(<String, Object?>{
+                'state': 'playing',
+                'videoSize': <String, Object?>{'width': 160, 'height': 90},
+              }),
+              null,
+            );
+        await tester.pump();
+        expect(tester.getSize(find.byType(FittedBox)), const Size(320, 240));
+        var rect = tester.getRect(find.byType(Texture));
+        expect(rect.width, closeTo(320, .01));
+        expect(rect.height, closeTo(180, .01));
+
+        await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeSuccessEnvelope(<String, Object?>{
+                'state': 'playing',
+                'videoPixelAspectRatio': 2.0,
+              }),
+              null,
+            );
+        await tester.pump();
+        rect = tester.getRect(find.byType(Texture));
+        expect(rect.width, closeTo(320, .01));
+        expect(rect.height, closeTo(90, .01));
+        await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+            .handlePlatformMessage(
+              channel.name,
+              channel.codec.encodeSuccessEnvelope(<String, Object?>{
+                'state': 'playing',
+                'videoPixelAspectRatio': 1.0,
+              }),
+              null,
+            );
+        await tester.pump();
+
+        await mount(VlcVideoFit.cover);
+        rect = tester.getRect(find.byType(Texture));
+        expect(rect.width, closeTo(426.6667, .01));
+        expect(rect.height, closeTo(240, .01));
+        expect(
+          tester.widget<FittedBox>(find.byType(FittedBox)).clipBehavior,
+          Clip.hardEdge,
+        );
+
+        await mount(VlcVideoFit.none);
+        rect = tester.getRect(find.byType(Texture));
+        expect(rect.width, closeTo(160, .01));
+        expect(rect.height, closeTo(90, .01));
+
+        await tester.pumpWidget(
+          MaterialApp(
+            home: SingleChildScrollView(
+              child: Center(
+                child: SizedBox(
+                  width: 320,
+                  child: VlcPlayer(key: playerKey, controller: controller),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pump();
+        expect(tester.takeException(), isNull);
+        expect(tester.getSize(find.byType(FittedBox)), const Size(320, 90));
+        await tester.pumpWidget(const SizedBox.shrink());
+        controller.dispose();
+      });
+    }
+  });
 }
 
 class _PlatformViewsRecorder {
