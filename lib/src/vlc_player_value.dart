@@ -50,6 +50,7 @@ class VlcPlayerValue {
     this.isSeekable = false,
     this.isLive = false,
     this.videoSize,
+    this.videoPixelAspectRatio = 1,
     this.bufferingProgress,
     this.error,
     this.errorDescription,
@@ -95,6 +96,9 @@ class VlcPlayerValue {
   /// Decoded video size when VLC exposes it.
   final Size? videoSize;
 
+  /// Width-to-height ratio of a video pixel, or 1 when unspecified.
+  final double videoPixelAspectRatio;
+
   /// Normalized buffering progress from `0.0` to `1.0`, when available.
   final double? bufferingProgress;
 
@@ -130,6 +134,7 @@ class VlcPlayerValue {
         other.isSeekable == isSeekable &&
         other.isLive == isLive &&
         other.videoSize == videoSize &&
+        other.videoPixelAspectRatio == videoPixelAspectRatio &&
         other.bufferingProgress == bufferingProgress &&
         other.error == error &&
         other.errorDescription == errorDescription;
@@ -148,6 +153,7 @@ class VlcPlayerValue {
     isSeekable,
     isLive,
     videoSize,
+    videoPixelAspectRatio,
     bufferingProgress,
     error,
     errorDescription,
@@ -169,6 +175,7 @@ class VlcPlayerValue {
     bool? isSeekable,
     bool? isLive,
     Size? videoSize,
+    double? videoPixelAspectRatio,
     bool clearVideoSize = false,
     double? bufferingProgress,
     bool clearBufferingProgress = false,
@@ -202,6 +209,9 @@ class VlcPlayerValue {
       isSeekable: isSeekable ?? this.isSeekable,
       isLive: isLive ?? this.isLive,
       videoSize: clearVideoSize ? null : videoSize ?? this.videoSize,
+      videoPixelAspectRatio: clearVideoSize
+          ? 1
+          : videoPixelAspectRatio ?? this.videoPixelAspectRatio,
       bufferingProgress: clearBufferingProgress
           ? null
           : bufferingProgress ?? this.bufferingProgress,
@@ -222,6 +232,7 @@ class VlcPlayerValue {
         _stateFromString(_stringValue(event['state'])) ?? previous.state;
     final hasVideoSize = event.containsKey('videoSize');
     final videoSize = hasVideoSize ? _sizeFromMap(event['videoSize']) : null;
+    final pixelAspect = _doubleValue(event['videoPixelAspectRatio']);
     final hasBufferingProgress = event.containsKey('bufferingProgress');
     final bufferingProgress = hasBufferingProgress
         ? _normalizedProgress(event['bufferingProgress'])
@@ -240,6 +251,9 @@ class VlcPlayerValue {
       isSeekable: _boolValue(event['isSeekable']),
       isLive: _boolValue(event['isLive']),
       videoSize: videoSize,
+      videoPixelAspectRatio: event.containsKey('videoPixelAspectRatio')
+          ? (pixelAspect != null && pixelAspect > 0 ? pixelAspect : 1)
+          : null,
       clearVideoSize:
           (hasVideoSize && videoSize == null) || _clearsVideoSize(state),
       bufferingProgress: bufferingProgress,

@@ -87,6 +87,19 @@ bool ConfigureVlcRuntime(std::string *error) {
   }
 
   SetEnvironmentVariableW(L"VLC_PLUGIN_PATH", plugins_directory.c_str());
+  // VLC loads its demux modules with a restricted DLL search path. Preload
+  // the private OpenMPT dependency from the app directory so the tracker
+  // module can resolve it, keeping it alive for the process-lifetime VLC
+  // module anchor. If loading fails, VLC can still use its original decoder.
+  static std::once_flag openmpt_once;
+  std::call_once(openmpt_once, [&app_directory] {
+    const std::wstring library = app_directory + L"\\vlc_player_openmpt_0_8.dll";
+    if (LoadLibraryExW(library.c_str(), nullptr,
+                       LOAD_LIBRARY_SEARCH_DLL_LOAD_DIR |
+                           LOAD_LIBRARY_SEARCH_SYSTEM32) == nullptr) {
+      OutputDebugStringW(L"vlc_player: OpenMPT unavailable; using VLC's original tracker decoder.\n");
+    }
+  });
   return true;
 }
 
@@ -284,11 +297,10 @@ EncodableMap MediaStats(const VlcMediaStats &stats) {
 }  // namespace
 
 // Raster callbacks may outlive the player while Flutter unregisters a texture.
-// Keep the callback state, and each returned pixel buffer's core, alive until
-// Flutter acknowledges their release.
+// Each submitted frame owns its pixels until Flutter releases that frame.
 struct WindowsVlcTextureState {
   struct Frame {
-    std::shared_ptr<VlcPlayerCore> core;
+    std::vector<uint8_t> bytes;
     FlutterDesktopPixelBuffer pixels = {};
   };
 
@@ -297,21 +309,20 @@ struct WindowsVlcTextureState {
     if (!current_core) {
       return nullptr;
     }
-    const uint8_t *buffer = nullptr;
+    auto frame = std::make_unique<Frame>();
     uint32_t width = 0;
     uint32_t height = 0;
-    if (!current_core->CopyPixels(&buffer, &width, &height)) {
+    if (!current_core->CopyPixelsTo(&frame->bytes, &width, &height)) {
       return nullptr;
     }
-    auto *frame = new Frame{std::move(current_core), {}};
-    frame->pixels.buffer = buffer;
+    frame->pixels.buffer = frame->bytes.data();
     frame->pixels.width = width;
     frame->pixels.height = height;
     frame->pixels.release_callback = [](void *context) {
       delete static_cast<Frame *>(context);
     };
-    frame->pixels.release_context = frame;
-    return &frame->pixels;
+    frame->pixels.release_context = frame.get();
+    return &frame.release()->pixels;
   }
 
   std::shared_ptr<VlcPlayerCore> core;
@@ -576,6 +587,8 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
     event[EncodableValue("isReady")] = EncodableValue(snapshot.is_ready);
     event[EncodableValue("isSeekable")] = EncodableValue(snapshot.is_seekable);
     event[EncodableValue("isLive")] = EncodableValue(snapshot.is_live);
+    event[EncodableValue("videoPixelAspectRatio")] =
+        EncodableValue(snapshot.video_pixel_aspect_ratio);
     if (snapshot.video_width > 0 && snapshot.video_height > 0) {
       EncodableMap video_size;
       video_size[EncodableValue("width")] =

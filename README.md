@@ -91,8 +91,76 @@ build/windows/x64/runner/Release/
   plugins/
 ```
 
-The first Windows build requires network access to download the verified VLC
-runtime archive.
+The first Windows build requires network access to download verified VLC and
+libopenmpt archives. It uses the VLC 3.0.21 runtime and the Opus, Speex,
+and libavcodec modules from VLC 3.0.24 to fix multichannel Opus and AVI/Speex
+header parsing and support interlaced VP5 decoding. These mixed-version modules
+pass the tested playback and lifecycle cases, but matching exported symbols do
+not guarantee compatibility for every input. The bundled Schroedinger
+decoder is excluded and libavcodec's
+direct rendering is disabled by default to avoid Dirac/VC-2 buffer corruption
+in VLC 3.0.x. This adds a frame copy for affected software decoding paths and
+may increase CPU or memory use; the Schroedinger Dirac encoder is also not
+bundled. Explicitly overriding this default with `--avcodec-dr` can reintroduce
+the crash. A media-free VLC instance and the Windows D3D11 library remain
+loaded for the process lifetime to avoid crashes during repeated module
+unloading; each player still has its own VLC instance and options.
+
+The bundled Windows MMDevice audio output assigns separate Windows audio
+sessions to simultaneous players so their volume and mute controls remain
+independent. Session slots are reused after players close; Windows may retain
+settings for a slot that a later player inherits. The modified module, license
+notices, and reproducible build instructions are in
+[`third_party/vlc_mmdevice`](third_party/vlc_mmdevice/README.md).
+
+The Windows DVB subtitle decoder uses the standard default palette when a
+referenced palette is unavailable. Subtitle content can remain visible, but
+default colors cannot reproduce a missing custom palette. The modified module
+and build instructions are in [`third_party/vlc_dvbsub`](third_party/vlc_dvbsub/README.md).
+
+On Windows, advanced-profile VC-1 elementary streams with a `.vc1` suffix and
+sequence header are automatically routed to VLC's VC-1 demuxer. The probe and
+its limitations are documented in [`third_party/vlc_vc1`](third_party/vlc_vc1/README.md).
+The Windows PVA demuxer also reports relative playback time; its clock and seek
+limitations are documented in [`third_party/vlc_pva`](third_party/vlc_pva/README.md).
+`tool/generate_windows_pva_wrap_fixture.py` can produce a timestamp-rollover
+fixture from a suitable PVA sample without re-encoding its audio or video.
+
+For tracker music on Windows, libopenmpt provides newer module decoding, while
+VLC's original MOD module remains available as a fallback. Enabling the VLC
+MOD reverb, bass enhancement, or surround options selects the original module;
+files that it cannot decode, such as the tested older DSMI AMF versions, may
+therefore remain unplayable with those effects enabled. Sources, license notices,
+and build instructions are in [`third_party/vlc_openmpt`](third_party/vlc_openmpt/README.md).
+
+On platforms using VLC 3.0's unmodified PVA demuxer, playback position can
+remain at zero. A player dedicated to PVA can try
+`options: ['--demux=avformat']` to use VLC's FFmpeg-based demuxer instead.
+This option affects demuxer selection for that player, and support may vary
+between files.
+
+On some systems, VLC 3.0 may log video-converter errors before falling back
+to software decoding for 10-bit AV1. Applications that need to avoid this
+fallback can try `options: ['--codec=dav1d,any']`, which prefers the dav1d
+software decoder while allowing VLC to select other decoders. This can forgo
+hardware AV1 decoding and increase CPU use.
+
+When an embedded Matroska subtitle track is enabled after a cue has already
+started, VLC 3.0 can wait until the next cue before displaying subtitles. For
+seekable media, an application can optionally call
+`await controller.seekTo(controller.value.position)` after selecting the track
+to refresh the current cue. This performs a seek and can briefly interrupt
+playback; it is not available for non-seekable streams.
+On Windows, the bundled Ogg demuxer corrects OGM text-subtitle timestamps.
+The modified source and build details are in
+[`third_party/vlc_ogg`](third_party/vlc_ogg/README.md). Selecting a track after
+a cue has begun can still depend on VLC's buffering and seek behavior.
+
+Windows also supports raw Shorten (`.shn`) streams containing 8- or 16-bit
+WAVE audio, or mono/stereo AIFF audio. For AIFF-C, the `NONE` and `sowt`
+encodings are supported. Seeking decodes from the beginning and can take
+longer on large files. The module and its limitations are documented in
+[`third_party/vlc_shorten`](third_party/vlc_shorten/README.md).
 
 ### Linux
 
@@ -160,6 +228,16 @@ final controller = VlcPlayerController(
   mediaSource: VlcMediaSource(
     uri: Uri.parse('https://example.com/live/playlist.m3u8'),
   ),
+  autoPlay: true,
+);
+```
+
+VLC's UDP listener syntax includes an `@` that Dart's `Uri` normalizes away.
+On Windows, use an exact location to preserve it:
+
+```dart
+await controller.setMedia(
+  VlcMediaSource.location(location: 'udp://@127.0.0.1:12345'),
   autoPlay: true,
 );
 ```
@@ -431,6 +509,7 @@ Fields:
 - `isSeekable`
 - `isLive`
 - `videoSize`
+- `videoPixelAspectRatio` (Windows and Linux; defaults to `1` when unavailable)
 - `bufferingProgress`
 - `error`
 - `errorDescription`
@@ -609,3 +688,106 @@ its setup instructions, then add
 The host saves recordings and checks 440/880 Hz tones and paused silence without
 using a microphone. Regenerate the fixture with
 `python tool/generate_session_fixture.py --ffmpeg <ffmpeg-path>`.
+
+For a wider Windows format check, the optional external corpus keeps large
+samples and recordings outside the repository. Use a local FFmpeg/FFprobe build
+and a Python environment containing `numpy`, `soundcard`, and `Pillow`. For
+example, from the repository root in PowerShell:
+
+```powershell
+python tool/generate_windows_format_corpus.py --ffmpeg <ffmpeg.exe> --output-dir E:/vlc-player-format-validation/samples/synthetic
+python tool/verify_session_output.py --ffmpeg <ffmpeg.exe> --output-dir E:/vlc-player-format-validation/results --capture-seconds 2
+```
+
+Leave the capture host running, then in another terminal run the following from
+`example/` with the example application in the foreground:
+
+```powershell
+flutter drive --no-dds -d windows --dart-define=VLC_PLAYER_CORPUS_MANIFEST=E:/vlc-player-format-validation/samples/synthetic/manifest.json --dart-define=VLC_PLAYER_AV_HOST=http://127.0.0.1:45939 --driver=test_driver/integration_test.dart --target=integration_test/windows_format_corpus_test.dart
+```
+
+The synthetic matrix alternates red and blue frames and 440/880 Hz tones. It
+checks the center of the foreground example window as well as VLC snapshots and
+actual system loopback audio; it does not use a microphone. Each generated case
+and any unavailable encoder are listed in the output directory. A passing
+matrix only establishes the tested combinations, not all VLC capabilities.
+
+`tool/download_windows_format_samples.py` can also download public FFmpeg
+samples into a specified external directory and records their source URLs and
+hashes. Run `tool/prepare_windows_sample_references.py` on that directory to
+create independently decoded references. Restart the capture host with
+`--reference-manifest <directory>/manifest.json`, and run the same drive command
+with that manifest and `integration_test/windows_public_samples_test.dart` as
+the target. Public reference videos compare VLC snapshots against decoded
+frames and the foreground window, and reference audio compares recorded output
+with decoded waveforms at the full 48 kHz capture rate to avoid frequency
+aliasing. Audio comparisons require a normalized correlation of at least 0.8;
+lower scores are inconclusive and need another sample or a more
+specific check. Windows loopback captures reporting discontinuities fail even
+if their waveform otherwise matches. Download or reference generation failures
+remain in the corresponding JSON report. Run
+`python -m unittest discover -s test -p test_reference_audio.py` to check the
+waveform verifier, including its frequency-aliasing negative control. Run
+`python -m unittest discover -s test -p test_windows_audio_capture.py` to check
+that a discontinuous loopback recording cannot pass.
+
+To check the Dirac/VC-2 playback regression, run
+`python tool/generate_windows_vc2_fixture.py --ffmpeg <ffmpeg.exe> --output-dir <directory>`
+and use its manifest with the public-reference drive test and capture host.
+To check raw VC-1, `tool/extract_windows_vc1_fixture.py` requires PyAV and a
+WMV/ASF source with a VC-1 video stream. It restores elementary-stream headers
+without re-encoding, after which `tool/prepare_windows_sample_references.py`
+can prepare the public-reference drive test.
+To test MIDI, provide an external SF2 SoundFont to
+`python tool/generate_windows_midi_fixture.py --soundfont <file.sf2> --output-dir <directory>`
+and use its manifest with the synthetic corpus drive test. The font is passed
+to VLC through the per-player options and is not bundled by the plugin.
+For a ProTracker MOD check, run
+`python tool/generate_windows_mod_fixture.py --ffmpeg <ffmpeg.exe> --output-dir <directory>`
+with an FFmpeg build that includes libopenmpt, then use its manifest with the
+public-reference drive test.
+For tracker files with prominent high frequencies, the default Windows MOD
+noise filter can change the reference waveform substantially. Generate a
+matching reference with `tool/prepare_windows_tracker_reference.py` and use its
+manifest with the public-reference drive test. This checks the playback and
+filter path against FFmpeg's libopenmpt decoder; because both use libopenmpt,
+it is not an independent check of tracker playback semantics. Pass
+`--libxmp <libxmp.dll>` to generate an independently decoded reference instead.
+To check patterned high-bit-depth and chroma profiles, generate samples with
+`python tool/generate_windows_video_profiles.py --ffmpeg <ffmpeg.exe> --output-dir <directory>`,
+then use `tool/prepare_windows_sample_references.py` and the public-reference
+drive test described above.
+`tool/generate_windows_stereo_fixtures.py` and
+`tool/generate_windows_surround_fixtures.py` generate channel-identification
+tones for the corpus drive test. A stereo loopback can verify channel routing
+and surround-to-stereo downmixing, but cannot validate a physical surround setup;
+the downmix check does not require the LFE channel to be present.
+For an RTP disconnect check, `tool/serve_windows_rtp_fixture.py` publishes a
+loopback RTP/MPEG-TS stream and stops it when the corpus test creates its
+trigger file; use a fresh external control directory for each run.
+For embedded subtitles, use `tool/generate_windows_embedded_subtitle_fixtures.py`
+with an external DVD subtitle sample and run
+`integration_test/windows_embedded_subtitle_test.dart` with the generated
+manifest and the capture host. This checks selecting and disabling subtitle
+tracks against visible pixels; subtitle timing and content require separate
+reference checks.
+The generator also accepts optional PGS and DVB sources. For default DVB
+palette checks, `tool/generate_windows_dvb_palette_fixtures.py` requires PyAV
+and a Matroska DVB subtitle source using composition and ancillary page IDs 1.
+It produces 2-bit and 4-bit color bands, an 8-bit sample and a grid covering
+all 256 8-bit entries, along with independent FFmpeg reference images. Start
+the capture host with the generated `--reference-manifest` and run the
+embedded-subtitle drive test with the same manifest. Each band or grid cell is
+checked independently against its reference composite, including transparent
+and partially transparent entries. The verifier's negative controls can be run
+with `python -m unittest discover -s test -p test_dvb_palette_reference.py`.
+
+For external subtitle rendering, generate fixtures with
+`python tool/generate_windows_subtitle_fixtures.py --output-dir <directory>`,
+then drive `integration_test/windows_subtitle_corpus_test.dart` with
+`VLC_PLAYER_SUBTITLE_MANIFEST`, `VLC_PLAYER_SUBTITLE_VIDEO`, and
+`VLC_PLAYER_AV_HOST` set using `--dart-define`. The video should show a red
+picture for at least 12 seconds, such as `session_av.mp4`. The test compares
+foreground-window pixels before and after adding each subtitle. The optional
+`tool/serve_windows_format_corpus.py` serves external fixtures on localhost
+with byte-range support for HTTP streaming tests.

@@ -18,6 +18,7 @@
 #include <vector>
 
 #include "vlc_player_plugin.h"
+#include "vlc_player_core.h"
 #include "windows_player_task_runner.h"
 
 namespace vlc_player {
@@ -122,6 +123,12 @@ class TestTextureRegistrar : public flutter::TextureRegistrar {
   flutter::TextureVariant* retired_texture() {
     std::lock_guard<std::mutex> lock(mutex_);
     return retired_texture_;
+  }
+
+  flutter::TextureVariant* texture(int64_t id) {
+    std::lock_guard<std::mutex> lock(mutex_);
+    const auto it = textures_.find(id);
+    return it == textures_.end() ? nullptr : it->second;
   }
 
   void AcknowledgeUnregister() {
@@ -320,6 +327,86 @@ TEST(VlcPlayerLifecycle, TextureCallbackSurvivesAsynchronousUnregister) {
       std::get<flutter::PixelBufferTexture>(*retired).CopyPixelBuffer(320, 180),
       nullptr);
   registrar.AcknowledgeUnregister();
+}
+
+TEST(VlcPlayerLifecycle, SubmittedPixelsRemainStableUntilFlutterReleasesThem) {
+  TestMessenger messenger;
+  TestTextureRegistrar registrar;
+  registrar.delay_unregister = true;
+  VlcPlayerPlugin plugin(&messenger, &registrar);
+  auto creation = Call(plugin, "create", CreateArguments());
+  ASSERT_TRUE(PumpUntil([&] { return creation->done; }));
+  ASSERT_TRUE(creation->error.empty()) << creation->error;
+  const int64_t view_id =
+      std::get<int64_t>(creation->response.at(EncodableValue("viewId")));
+  const int64_t texture_id =
+      std::get<int64_t>(creation->response.at(EncodableValue("textureId")));
+  auto* texture = registrar.texture(texture_id);
+  ASSERT_NE(texture, nullptr);
+
+  std::string path = VLC_PLAYER_TEST_MEDIA_PATH;
+  path.replace(path.find_last_of("/\\") + 1, std::string::npos,
+               "session_av.mp4");
+  EncodableMap arguments = ViewArguments(view_id);
+  arguments[EncodableValue("uri")] = EncodableValue(std::string("file:///") + path);
+  arguments[EncodableValue("autoPlay")] = EncodableValue(true);
+  auto source = Call(plugin, "setSource", arguments);
+  ASSERT_TRUE(source->done);
+  ASSERT_TRUE(source->error.empty()) << source->error;
+
+  const FlutterDesktopPixelBuffer* first = nullptr;
+  auto& pixel_texture = std::get<flutter::PixelBufferTexture>(*texture);
+  ASSERT_TRUE(PumpUntil([&] {
+    auto* frame = pixel_texture.CopyPixelBuffer(320, 180);
+    if (!frame) return false;
+    const auto index = ((frame->height / 2) * frame->width + frame->width / 2) * 4;
+    if (frame->buffer[index] > 150 && frame->buffer[index + 2] < 80) {
+      first = frame;
+      return true;
+    }
+    if (frame->release_callback) frame->release_callback(frame->release_context);
+    return false;
+  }));
+  ASSERT_NE(first, nullptr);
+  const std::vector<uint8_t> original(first->buffer,
+                                      first->buffer + first->width * first->height * 4);
+  auto seek_arguments = ViewArguments(view_id);
+  seek_arguments[EncodableValue("position")] = EncodableValue(int64_t{17000});
+  auto seek = Call(plugin, "seekTo", seek_arguments);
+  ASSERT_TRUE(seek->done);
+  ASSERT_TRUE(seek->error.empty()) << seek->error;
+  ASSERT_TRUE(PumpUntil([&] {
+    auto* frame = pixel_texture.CopyPixelBuffer(320, 180);
+    if (!frame) return false;
+    const auto index = ((frame->height / 2) * frame->width + frame->width / 2) * 4;
+    const bool blue = frame->buffer[index + 2] > 150 && frame->buffer[index] < 80;
+    if (frame->release_callback) frame->release_callback(frame->release_context);
+    return blue;
+  }));
+  EXPECT_TRUE(std::equal(original.begin(), original.end(), first->buffer));
+  Call(plugin, "dispose", ViewArguments(view_id));
+  ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == 1; }));
+  registrar.AcknowledgeUnregister();
+  EXPECT_TRUE(std::equal(original.begin(), original.end(), first->buffer));
+  if (first->release_callback) first->release_callback(first->release_context);
+}
+
+TEST(VlcPlayerLifecycle, ReportsVisibleVideoSizeInsteadOfPaddedBufferSize) {
+  VlcPlayerCore core({"--no-audio"}, [] {});
+  ASSERT_TRUE(core.is_valid()) << core.error();
+  std::string path = VLC_PLAYER_TEST_MEDIA_PATH;
+  path.replace(path.find_last_of("/\\") + 1, std::string::npos,
+               "session_av.mp4");
+  ASSERT_TRUE(core.SetSource(std::string("file:///") + path, {}, {}, 0, true).empty());
+  ASSERT_TRUE(PumpUntil([&] {
+    const auto snapshot = core.Snapshot();
+    return snapshot.state == "playing" && snapshot.video_width != 0 &&
+           snapshot.video_height != 0;
+  }));
+  const auto snapshot = core.Snapshot();
+  EXPECT_EQ(snapshot.video_width, 320u);
+  EXPECT_EQ(snapshot.video_height, 180u);
+  core.Dispose();
 }
 
 TEST(VlcPlayerLifecycle, ShutdownDrainsPendingCreateOnPlatformThread) {

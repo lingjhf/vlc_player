@@ -9,11 +9,39 @@
 #include <exception>
 #include <fstream>
 #include <sstream>
+#include <stdexcept>
 #include <thread>
 #include <utility>
 
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 namespace vlc_player {
 namespace {
+
+#ifdef _WIN32
+void HoldWindowsVlcModulesForProcess() {
+  // Repeatedly unloading VLC's Windows modules can terminate the process in
+  // module destructors. Keep a separate, media-free instance alive for the
+  // process lifetime; player instances and their options remain independent.
+  // D3D11 must also stay loaded while its decoder cleanup threads wind down.
+  static const bool held = [] {
+    auto* anchor = libvlc_new(0, nullptr);
+    if (anchor == nullptr) {
+      throw std::runtime_error("Failed to initialize the VLC runtime.");
+    }
+    // Both references intentionally live until process exit. Windows then
+    // reclaims them without unloading modules between playback sessions.
+    (void)LoadLibraryExW(L"d3d11.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    return true;
+  }();
+  (void)held;
+}
+#endif
 
 int64_t NonNegative(libvlc_time_t value) {
   return std::max<int64_t>(0, value);
@@ -91,6 +119,11 @@ bool ReadFileIfReady(const std::string& path, std::vector<uint8_t>* data) {
 VlcPlayerCore::VlcPlayerCore(std::vector<std::string> options,
                              FrameAvailableCallback on_frame_available)
     : on_frame_available_(std::move(on_frame_available)) {
+#ifdef _WIN32
+  // VLC 3.0.x direct rendering can overwrite picture buffers for Dirac/VC-2.
+  // Put the safe default first so an explicit caller option can still override it.
+  options.insert(options.begin(), "--no-avcodec-dr");
+#endif
   std::vector<const char*> argv;
   argv.reserve(options.size());
   for (const auto& option : options) {
@@ -98,6 +131,9 @@ VlcPlayerCore::VlcPlayerCore(std::vector<std::string> options,
   }
 
   try {
+#ifdef _WIN32
+    HoldWindowsVlcModulesForProcess();
+#endif
     instance_ =
         std::make_unique<VLC::Instance>(static_cast<int>(argv.size()),
                                         argv.data());
@@ -477,10 +513,35 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   snapshot.is_seekable = player_->isSeekable();
   snapshot.is_live = IsLiveState(snapshot.state) && snapshot.duration == 0 &&
                      !snapshot.is_seekable;
-  {
+  unsigned int visible_width = 0;
+  unsigned int visible_height = 0;
+  if (player_->size(0, &visible_width, &visible_height) && visible_width > 0 &&
+      visible_height > 0) {
+    snapshot.video_width = visible_width;
+    snapshot.video_height = visible_height;
+  } else {
     std::lock_guard<std::mutex> lock(video_mutex_);
     snapshot.video_width = video_width_;
     snapshot.video_height = video_height_;
+  }
+  const auto tracks = media->tracks();
+  const int selected_video_track = player_->videoTrack();
+  const VLC::MediaTrack* chosen_track = nullptr;
+  const VLC::MediaTrack* only_video_track = nullptr;
+  int video_track_count = 0;
+  for (const auto& track : tracks) {
+    if (track.type() != VLC::MediaTrack::Type::Video) continue;
+    ++video_track_count;
+    only_video_track = &track;
+    if (track.id() == selected_video_track) chosen_track = &track;
+  }
+  if (chosen_track == nullptr && video_track_count == 1) {
+    chosen_track = only_video_track;
+  }
+  if (chosen_track != nullptr && chosen_track->sarNum() != 0 &&
+      chosen_track->sarDen() != 0) {
+    snapshot.video_pixel_aspect_ratio =
+        static_cast<double>(chosen_track->sarNum()) / chosen_track->sarDen();
   }
   return snapshot;
 }
@@ -502,15 +563,31 @@ bool VlcPlayerCore::CopyPixels(const uint8_t** out_buffer,
   return true;
 }
 
+bool VlcPlayerCore::CopyPixelsTo(std::vector<uint8_t>* out_buffer,
+                                 uint32_t* width,
+                                 uint32_t* height) {
+  std::lock_guard<std::mutex> lock(video_mutex_);
+  if (render_buffer_.empty()) {
+    return false;
+  }
+  *out_buffer = render_buffer_;
+  *width = video_width_;
+  *height = video_height_;
+  return true;
+}
+
 void VlcPlayerCore::Dispose() {
   if (disposed_.exchange(true)) {
     return;
   }
   if (player_ != nullptr) {
+    // Keep callbacks valid until VLC has stopped its decoder and video output.
+    // Clearing them during playback can make VLC recreate a vout without a
+    // lock callback while decoder threads are still submitting pictures.
+    player_->stop();
     libvlc_video_set_callbacks(player_->get(), nullptr, nullptr, nullptr,
                                nullptr);
     libvlc_video_set_format_callbacks(player_->get(), nullptr, nullptr);
-    player_->stop();
     player_.reset();
   }
   on_frame_available_ = nullptr;

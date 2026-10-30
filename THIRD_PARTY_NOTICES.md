@@ -31,3 +31,16 @@ LGPL-2.1 license text in `third_party/libvlcpp/COPYING`.
 
 - libvlcpp source: https://code.videolan.org/videolan/libvlcpp
 - Local license copy: third_party/libvlcpp/COPYING
+
+## Windows VLC modules and decoding libraries
+
+The Windows package includes modified VLC modules for audio output, demuxing,
+and subtitle decoding. Their sources, licenses, and build instructions are in
+the corresponding `third_party/vlc_*` directories. The Shorten module links a
+minimal FFmpeg build and includes a relinkable demux object; its FFmpeg source
+location, patch, and license are documented in `third_party/vlc_shorten`.
+
+The Windows build also downloads official VLC decoder modules and libopenmpt.
+The libopenmpt and dependency notices are in `third_party/vlc_openmpt/licenses`.
+Consult the module directories for the applicable licenses and redistribution
+requirements.
