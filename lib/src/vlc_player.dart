@@ -216,14 +216,16 @@ class _VlcPlayerState extends State<VlcPlayer> {
 
   Widget _fitTexture(int textureId, Size? videoSize) {
     final texture = Texture(textureId: textureId);
-    final size = videoSize;
-    if (widget.fit == VlcVideoFit.fill || size == null) {
+    if (widget.fit == VlcVideoFit.fill) {
       return SizedBox.expand(child: texture);
+    }
+    if (videoSize == null) {
+      return const SizedBox.expand();
     }
 
     final sizedTexture = SizedBox(
-      width: size.width,
-      height: size.height,
+      width: videoSize.width,
+      height: videoSize.height,
       child: texture,
     );
     return Center(
