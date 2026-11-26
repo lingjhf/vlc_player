@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FLUTTER_VERSION: '3.50.1'
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -40,8 +43,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
-          # Flutter 3.50 requires newer Gradle, AGP, and Kotlin versions.
-          flutter-version: '3.47.8'
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Show Flutter version
@@ -103,6 +105,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Show Flutter version
@@ -137,6 +140,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Show Flutter version
@@ -186,6 +190,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Enable Linux desktop

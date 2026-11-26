@@ -1,29 +1,39 @@
 # Changelog
 
-## Unreleased
+## 3.0.0 - 2026-11-27
 
-### Fixed
+### Breaking
 
-- Moved Windows VLC initialization and teardown off the platform thread while
-  keeping Flutter channel cleanup on the platform thread.
-- Delivered Windows playback polling events on the platform thread as required
-  by Flutter's platform channels.
-- Reused a lifecycle worker instead of retaining a thread handle for each
-  player creation and disposal, and kept textures alive until Flutter finishes
-  unregistering them.
+- Requires Flutter 3.50.1 and Dart 3.14.0 or newer.
 
 ### Added
 
-- Added Windows lifecycle regression coverage for failed initialization,
-  overlapping creation and disposal, repeated use, and shutdown.
-- Updated Linux's GoogleTest dependency for compatibility with CMake 4.
-
-## 2.1.3 - 2026-06-02
+- Added `VlcMediaSource.location` for exact VLC addresses such as UDP and RTP
+  inputs.
+- Added `VlcPlayerValue.videoPixelAspectRatio` and corrected desktop display
+  geometry for non-square video pixels.
 
 ### Changed
 
+- Improved Windows playback compatibility for Shorten, tracker files,
+  multichannel Opus, AVI/Speex, VC-1, PVA, OGM subtitles, and DVB subtitles.
+- Isolated Windows audio sessions when multiple players are active.
+- Updated Android tooling to Gradle 9.5.0, AGP 9.3.1, and Kotlin 2.4.20.
 - Expanded the package description in `pubspec.yaml` to satisfy pub.dev
   metadata scoring requirements.
+
+### Fixed
+
+- Moved Windows VLC initialization and teardown off the Flutter platform
+  thread and delivered playback events on the platform thread.
+- Prevented the first video frame from jumping in size when Windows and Linux
+  players start playback or switch sources.
+- Serialized media and playlist changes and kept native player sessions
+  associated with the widget that owns them.
+- Prevented Android's final buffering event from replacing a playing or paused
+  state.
+- Released retained LibVLC media references after Android reads media metadata
+  or playback statistics.
 
 ## 2.1.2 - 2026-05-28
 
