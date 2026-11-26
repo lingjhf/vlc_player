@@ -66,6 +66,9 @@ jobs:
         working-directory: example
         run: flutter test test/widget_test.dart
 
+      - name: Validate pub.dev package
+        run: flutter pub publish --dry-run
+
       - name: Build Android example
         working-directory: example
         run: flutter build apk --debug
