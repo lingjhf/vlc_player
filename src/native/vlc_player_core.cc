@@ -199,6 +199,12 @@ std::string VlcPlayerCore::SetSource(const std::string& uri,
   }
 
   {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    render_generation_ = 0;
+    texture_generation_ = 0;
+    video_format_pending_ = true;
+  }
+  {
     std::lock_guard<std::mutex> lock(state_mutex_);
     state_override_ = "opening";
     error_code_.clear();
@@ -513,16 +519,20 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
   snapshot.is_seekable = player_->isSeekable();
   snapshot.is_live = IsLiveState(snapshot.state) && snapshot.duration == 0 &&
                      !snapshot.is_seekable;
+  {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    if (render_generation_ == 0) {
+      return snapshot;
+    }
+    snapshot.video_width = video_width_;
+    snapshot.video_height = video_height_;
+  }
   unsigned int visible_width = 0;
   unsigned int visible_height = 0;
   if (player_->size(0, &visible_width, &visible_height) && visible_width > 0 &&
       visible_height > 0) {
     snapshot.video_width = visible_width;
     snapshot.video_height = visible_height;
-  } else {
-    std::lock_guard<std::mutex> lock(video_mutex_);
-    snapshot.video_width = video_width_;
-    snapshot.video_height = video_height_;
   }
   const auto tracks = media->tracks();
   const int selected_video_track = player_->videoTrack();
@@ -550,7 +560,7 @@ bool VlcPlayerCore::CopyPixels(const uint8_t** out_buffer,
                                uint32_t* width,
                                uint32_t* height) {
   std::lock_guard<std::mutex> lock(video_mutex_);
-  if (render_buffer_.empty()) {
+  if (render_generation_ == 0) {
     return false;
   }
   if (texture_generation_ != render_generation_) {
@@ -567,7 +577,7 @@ bool VlcPlayerCore::CopyPixelsTo(std::vector<uint8_t>* out_buffer,
                                  uint32_t* width,
                                  uint32_t* height) {
   std::lock_guard<std::mutex> lock(video_mutex_);
-  if (render_buffer_.empty()) {
+  if (render_generation_ == 0) {
     return false;
   }
   *out_buffer = render_buffer_;
@@ -603,6 +613,7 @@ uint32_t VlcPlayerCore::SetupFormat(char* chroma,
   pitches[0] = *width * 4;
   lines[0] = *height;
   ResizeVideoBuffer(*width, *height, pitches[0]);
+  video_format_pending_ = true;
   return 1;
 }
 
@@ -628,7 +639,7 @@ void VlcPlayerCore::Unlock(void* picture, void* const* planes) {
 
 void VlcPlayerCore::Display(void* picture) {
   if (!disposed_.load() && on_frame_available_) {
-    on_frame_available_();
+    on_frame_available_(video_format_pending_.exchange(false));
   }
 }
 

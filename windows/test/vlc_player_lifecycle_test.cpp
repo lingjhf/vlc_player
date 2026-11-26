@@ -392,7 +392,7 @@ TEST(VlcPlayerLifecycle, SubmittedPixelsRemainStableUntilFlutterReleasesThem) {
 }
 
 TEST(VlcPlayerLifecycle, ReportsVisibleVideoSizeInsteadOfPaddedBufferSize) {
-  VlcPlayerCore core({"--no-audio"}, [] {});
+  VlcPlayerCore core({"--no-audio"}, [](bool) {});
   ASSERT_TRUE(core.is_valid()) << core.error();
   std::string path = VLC_PLAYER_TEST_MEDIA_PATH;
   path.replace(path.find_last_of("/\\") + 1, std::string::npos,

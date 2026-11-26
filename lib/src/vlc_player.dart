@@ -220,39 +220,45 @@ class _VlcPlayerState extends State<VlcPlayer> {
 
   Widget _fitTexture(int textureId, Size? videoSize, double pixelAspectRatio) {
     final texture = Texture(textureId: textureId);
-    final size = videoSize;
-    if (widget.fit == VlcVideoFit.fill || size == null) {
+    if (widget.fit == VlcVideoFit.fill) {
       return SizedBox.expand(child: texture);
     }
 
-    final pixelAspect = pixelAspectRatio.isFinite && pixelAspectRatio > 0
-        ? pixelAspectRatio
-        : 1.0;
-    final adjustedWidth = size.width * pixelAspect;
-    final displayWidth = adjustedWidth.isFinite ? adjustedWidth : size.width;
-    final sizedTexture = SizedBox(
-      width: displayWidth,
-      height: size.height,
-      child: texture,
-    );
+    var displaySize = Size.zero;
+    Widget? fittedTexture;
+    if (videoSize != null) {
+      final pixelAspect = pixelAspectRatio.isFinite && pixelAspectRatio > 0
+          ? pixelAspectRatio
+          : 1.0;
+      final adjustedWidth = videoSize.width * pixelAspect;
+      displaySize = Size(
+        adjustedWidth.isFinite ? adjustedWidth : videoSize.width,
+        videoSize.height,
+      );
+      fittedTexture = FittedBox(
+        fit: switch (widget.fit) {
+          VlcVideoFit.contain => BoxFit.contain,
+          VlcVideoFit.cover => BoxFit.cover,
+          VlcVideoFit.none => BoxFit.none,
+          VlcVideoFit.fill => BoxFit.fill,
+        },
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: displaySize.width,
+          height: displaySize.height,
+          child: texture,
+        ),
+      );
+    }
     return LayoutBuilder(
       builder: (context, constraints) => SizedBox(
         width: constraints.hasBoundedWidth
             ? constraints.maxWidth
-            : displayWidth,
+            : displaySize.width,
         height: constraints.hasBoundedHeight
             ? constraints.maxHeight
-            : size.height,
-        child: FittedBox(
-          fit: switch (widget.fit) {
-            VlcVideoFit.contain => BoxFit.contain,
-            VlcVideoFit.cover => BoxFit.cover,
-            VlcVideoFit.none => BoxFit.none,
-            VlcVideoFit.fill => BoxFit.fill,
-          },
-          clipBehavior: Clip.hardEdge,
-          child: sizedTexture,
-        ),
+            : displaySize.height,
+        child: fittedTexture,
       ),
     );
   }

@@ -376,11 +376,20 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
     if (!init_error_.empty() || disposed_.load() || flutter_detached_.load()) {
       return;
     }
-    core_ = std::make_shared<VlcPlayerCore>(options, [this] {
-      if (!disposed_.load() && texture_id_ != -1) {
-        texture_registrar_->MarkTextureFrameAvailable(texture_id_);
-      }
-    });
+    core_ = std::make_shared<VlcPlayerCore>(
+        options, [this, weak = weak_from_this()](bool video_format_changed) {
+          if (disposed_.load() || texture_id_ == -1) {
+            return;
+          }
+          if (video_format_changed) {
+            task_runner_->PostPlatformTask([weak] {
+              if (auto player = weak.lock()) {
+                player->SendSnapshot();
+              }
+            });
+          }
+          texture_registrar_->MarkTextureFrameAvailable(texture_id_);
+        });
     if (!core_->is_valid()) {
       init_error_ = core_->error();
       return;

@@ -18,7 +18,7 @@ namespace vlc_player {
 
 class VlcPlayerCore {
  public:
-  using FrameAvailableCallback = std::function<void()>;
+  using FrameAvailableCallback = std::function<void(bool video_format_changed)>;
 
   explicit VlcPlayerCore(std::vector<std::string> options,
                          FrameAvailableCallback on_frame_available);
@@ -100,6 +100,7 @@ class VlcPlayerCore {
   std::unique_ptr<VLC::MediaPlayer> player_;
   std::string init_error_;
   std::atomic<bool> disposed_ = false;
+  std::atomic<bool> video_format_pending_ = false;
 
   mutable std::mutex video_mutex_;
   std::vector<uint8_t> frame_buffer_;

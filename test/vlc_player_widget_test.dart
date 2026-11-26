@@ -156,7 +156,7 @@ void main() {
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
-          child: VlcPlayer(controller: first),
+          child: VlcPlayer(controller: first, fit: VlcVideoFit.fill),
         ),
       );
       await tester.pump();
@@ -166,7 +166,7 @@ void main() {
       await tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
-          child: VlcPlayer(controller: second),
+          child: VlcPlayer(controller: second, fit: VlcVideoFit.fill),
         ),
       );
       await tester.pump();
@@ -205,7 +205,7 @@ void main() {
       Future<void> show(VlcPlayerController controller) => tester.pumpWidget(
         Directionality(
           textDirection: TextDirection.ltr,
-          child: VlcPlayer(controller: controller),
+          child: VlcPlayer(controller: controller, fit: VlcVideoFit.fill),
         ),
       );
       await show(first);
@@ -356,7 +356,7 @@ void main() {
     });
   });
 
-  testWidgets('shows the texture after native player creation succeeds', (
+  testWidgets('fill shows the texture before the video size is known', (
     WidgetTester tester,
   ) async {
     await runAsWindows(() async {
@@ -371,7 +371,9 @@ void main() {
           });
 
       await tester.pumpWidget(
-        MaterialApp(home: VlcPlayer(controller: controller)),
+        MaterialApp(
+          home: VlcPlayer(controller: controller, fit: VlcVideoFit.fill),
+        ),
       );
       await tester.pump();
 
@@ -383,7 +385,7 @@ void main() {
     });
   });
 
-  testWidgets('fits texture players with the configured video fit', (
+  testWidgets('waits for video dimensions before fitting the texture', (
     WidgetTester tester,
   ) async {
     await runAsWindows(() async {
@@ -409,12 +411,16 @@ void main() {
       await tester.pump();
 
       const channel = EventChannel('vlc_player/events/8');
+      expect(controller.isAttached, isTrue);
+      expect(find.byType(Texture), findsNothing);
+
       await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
           .handlePlatformMessage(
             channel.name,
             channel.codec.encodeSuccessEnvelope(<String, Object?>{
               'state': 'playing',
-              'videoSize': <String, Object?>{'width': 640, 'height': 360},
+              'videoSize': <String, Object?>{'width': 640, 'height': 480},
+              'videoPixelAspectRatio': 1.25,
             }),
             null,
           );
@@ -422,7 +428,18 @@ void main() {
 
       final fittedBox = tester.widget<FittedBox>(find.byType(FittedBox));
       expect(fittedBox.fit, BoxFit.cover);
-      expect(find.byType(Texture), findsOneWidget);
+      expect(tester.getSize(find.byType(Texture)), const Size(800, 480));
+
+      await TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+          .handlePlatformMessage(
+            channel.name,
+            channel.codec.encodeSuccessEnvelope(<String, Object?>{
+              'state': 'opening',
+            }),
+            null,
+          );
+      await tester.pump();
+      expect(find.byType(Texture), findsNothing);
 
       controller.dispose();
       await tester.pumpWidget(const SizedBox.shrink());

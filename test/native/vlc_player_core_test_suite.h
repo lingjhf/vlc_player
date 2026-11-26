@@ -19,7 +19,7 @@ std::vector<std::string> VlcPlayerCoreTestOptions();
 namespace {
 
 std::unique_ptr<VlcPlayerCore> MakeCore() {
-  return std::make_unique<VlcPlayerCore>(VlcPlayerCoreTestOptions(), [] {});
+  return std::make_unique<VlcPlayerCore>(VlcPlayerCoreTestOptions(), [](bool) {});
 }
 
 }  // namespace
@@ -126,6 +126,8 @@ TEST(VlcPlayerCore, CopyPixelsWithoutFrameReturnsFalse) {
   ASSERT_TRUE(core->is_valid()) << core->error();
 
   EXPECT_FALSE(core->CopyPixels(&buffer, &width, &height));
+  core->ResizeVideoBufferForTesting(4, 4, 16);
+  EXPECT_FALSE(core->CopyPixels(&buffer, &width, &height));
   EXPECT_EQ(buffer, &sentinel);
   EXPECT_EQ(width, 7u);
   EXPECT_EQ(height, 9u);
@@ -202,6 +204,34 @@ TEST(VlcPlayerCore, OwnedPixelsSurviveLaterFramesAndResolutionChanges) {
 
   EXPECT_EQ(first, std::vector<uint8_t>(16, 17));
   EXPECT_EQ(second, std::vector<uint8_t>(16, 23));
+}
+
+TEST(VlcPlayerCore, SourceChangeHidesPreviousFrameAndDimensions) {
+  auto core = MakeCore();
+  ASSERT_TRUE(core->is_valid()) << core->error();
+  ASSERT_EQ(core->SetSource("file:///first.mp4", {}, {}, 0, false), "");
+  core->ResizeVideoBufferForTesting(2, 2, 8);
+  core->SimulateFrameForTesting(17);
+  EXPECT_EQ(core->Snapshot().video_width, 2u);
+
+  std::vector<uint8_t> pixels;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  ASSERT_TRUE(core->CopyPixelsTo(&pixels, &width, &height));
+  ASSERT_EQ(core->SetSource("file:///second.mp4", {}, {}, 0, false), "");
+  const auto pending = core->Snapshot();
+  EXPECT_EQ(pending.video_width, 0u);
+  EXPECT_EQ(pending.video_height, 0u);
+  EXPECT_FALSE(core->CopyPixelsTo(&pixels, &width, &height));
+  EXPECT_EQ(pixels, std::vector<uint8_t>(16, 17));
+
+  core->ResizeVideoBufferForTesting(4, 2, 16);
+  EXPECT_FALSE(core->CopyPixelsTo(&pixels, &width, &height));
+  core->SimulateFrameForTesting(23);
+  ASSERT_TRUE(core->CopyPixelsTo(&pixels, &width, &height));
+  EXPECT_EQ(width, 4u);
+  EXPECT_EQ(height, 2u);
+  EXPECT_EQ(pixels, std::vector<uint8_t>(32, 23));
 }
 
 TEST(VlcPlayerCore, DisposeIsIdempotentAndGuardsCommands) {
