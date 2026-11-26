@@ -53,7 +53,6 @@ SAMPLES = {
     'real_sipr': 'real/AC-sipr/intro.rm',
     'ogm': 'archive/extension/ogm/ogg+mpeg4+vorbis+0x0000+ogm_remux.ogm',
     'shorten': 'A-codecs/lossless/luckynight.shn',
-    'mpeg4_als': 'A-codecs/lossless/luckynight-als.mp4',
     'dts_96_24': 'A-codecs/DTS/dts/96-24.dts',
     'dtshd_ma_stereo': 'A-codecs/DTS/dts/Master Audio 2.0 16bit.dts',
     'dtshd_ma_51': 'A-codecs/DTS/dts/Master Audio 5.1 24bit.dts',
