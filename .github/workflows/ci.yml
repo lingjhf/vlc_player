@@ -33,10 +33,15 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Cache Gradle dependencies
+        uses: gradle/actions/setup-gradle@v5
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          # Flutter 3.50 requires newer Gradle, AGP, and Kotlin versions.
+          flutter-version: '3.47.8'
           cache: true
 
       - name: Show Flutter version
@@ -74,16 +79,15 @@ jobs:
 
       - name: Run Android integration tests
         uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 20
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_6
           working-directory: example
           script: |
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/android_lifecycle_test.dart
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/session_lifecycle_test.dart
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
+            flutter drive --no-pub --no-dds --timeout=480 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/ci_playback.dart
+            flutter drive --no-pub --no-dds --timeout=480 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   apple:
     name: iOS and macOS
@@ -145,6 +149,12 @@ jobs:
         working-directory: example
         run: flutter pub get
 
+      - name: Cache Windows VLC archive
+        uses: actions/cache@v5
+        with:
+          path: example/build/windows/x64/plugins/vlc_player/vlc/*.7z
+          key: windows-vlc-archive-${{ hashFiles('windows/CMakeLists.txt') }}
+
       - name: Build Windows example
         working-directory: example
         run: flutter build windows
@@ -155,15 +165,7 @@ jobs:
 
       - name: Run Windows integration tests
         working-directory: example
-        run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
-
-      - name: Run Windows session lifecycle tests
-        working-directory: example
-        run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/session_lifecycle_test.dart
-
-      - name: Run Windows format compatibility tests
-        working-directory: example
-        run: flutter drive --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
+        run: flutter drive --no-pub --no-dds --timeout=1200 -d windows --driver=test_driver/integration_test.dart --target=integration_test/ci_playback.dart
 
   linux:
     name: Linux
