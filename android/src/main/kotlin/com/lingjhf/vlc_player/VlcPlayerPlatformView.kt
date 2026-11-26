@@ -133,19 +133,22 @@ internal class VlcPlayerPlatformView(
 
         try {
             val media = Media(libVLC, Uri.parse(uri))
-            httpHeaders.forEach { (name, value) ->
-                if (isValidHeader(name, value)) {
-                    media.addOption(":http-header=$name: $value")
+            try {
+                httpHeaders.forEach { (name, value) ->
+                    if (isValidHeader(name, value)) {
+                        media.addOption(":http-header=$name: $value")
+                    }
                 }
+                mediaOptions.forEach { option ->
+                    media.addOption(option)
+                }
+                if (startPosition > 0L) {
+                    media.addOption(":start-time=${startPosition / 1000.0}")
+                }
+                mediaPlayer.media = media
+            } finally {
+                media.release()
             }
-            mediaOptions.forEach { option ->
-                media.addOption(option)
-            }
-            if (startPosition > 0L) {
-                media.addOption(":start-time=${startPosition / 1000.0}")
-            }
-            mediaPlayer.media = media
-            media.release()
             errorCode = null
             errorDescription = null
             lastSentEvent = null
@@ -360,7 +363,13 @@ internal class VlcPlayerPlatformView(
             result.success(emptyMediaInfo())
             return
         }
-        result.success(mediaInfo(media, mediaPlayer.length))
+        // LibVLC returns a retained IMedia from MediaPlayer.getMedia().
+        val info = try {
+            mediaInfo(media, mediaPlayer.length)
+        } finally {
+            media.release()
+        }
+        result.success(info)
     }
 
     fun getMediaStats(result: MethodChannel.Result) {
@@ -368,7 +377,13 @@ internal class VlcPlayerPlatformView(
             return
         }
 
-        result.success(mediaStats(mediaPlayer.media?.getStats()))
+        val media = mediaPlayer.media
+        val stats = try {
+            mediaStats(media?.getStats())
+        } finally {
+            media?.release()
+        }
+        result.success(stats)
     }
 
     private fun mediaInfo(media: IMedia, playerLength: Long): Map<String, Any?> {

@@ -27,7 +27,7 @@ void main() {
           tester,
           const _FormatCase(
             name: 'MP4 with SRT subtitle',
-            assetPath: '$_assetRoot/video.mp4',
+            assetPath: '$_assetRoot/session_av.mp4',
             expectsVideo: true,
             subtitleAssetPath: '$_assetRoot/captions.srt',
           ),
@@ -179,11 +179,14 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
   expect(controller.isAttached, isTrue);
 
   final sourceUri = await _materializeSource(format);
-  await controller.setMedia(VlcMediaSource(uri: sourceUri), autoPlay: true);
-
   final subtitleAssetPath = format.subtitleAssetPath;
   if (subtitleAssetPath != null) {
-    await controller.addSubtitle(await materializeAsset(subtitleAssetPath));
+    debugPrint('SRT smoke: starting playback');
+  }
+  await controller.setMedia(VlcMediaSource(uri: sourceUri), autoPlay: true);
+
+  if (subtitleAssetPath != null) {
+    await _verifyExternalSubtitle(tester, controller, subtitleAssetPath);
   }
 
   final value = await _waitForUsablePlayback(tester, controller, format.name);
@@ -207,9 +210,42 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
     );
   }
 
+  if (subtitleAssetPath != null) {
+    debugPrint('SRT smoke: stopping playback');
+  }
   await controller.stop();
+  if (subtitleAssetPath != null) {
+    debugPrint('SRT smoke: unmounting the player');
+  }
   await tester.pumpWidget(const SizedBox.shrink());
   await tester.pumpAndSettle(const Duration(milliseconds: 50));
+}
+
+Future<void> _verifyExternalSubtitle(
+  WidgetTester tester,
+  VlcPlayerController controller,
+  String assetPath,
+) async {
+  await pumpUntil(
+    tester,
+    () =>
+        controller.value.state == VlcPlaybackState.playing &&
+        controller.value.videoSize != null,
+    description: 'active video before adding the SRT subtitle',
+    attempts: 80,
+  );
+  debugPrint('SRT smoke: adding the subtitle');
+  await controller.addSubtitle(await materializeAsset(assetPath));
+  for (var attempt = 0; attempt < 40; attempt += 1) {
+    final tracks = await controller.getSubtitleTracks();
+    if (tracks.any((track) => track.id >= 0)) {
+      expect(controller.value.state, VlcPlaybackState.playing);
+      debugPrint('SRT smoke: subtitle track detected during playback');
+      return;
+    }
+    await tester.pump(const Duration(milliseconds: 250));
+  }
+  fail('The external SRT subtitle did not appear in the track list.');
 }
 
 Future<Uri> _materializeSource(_FormatCase format) async {

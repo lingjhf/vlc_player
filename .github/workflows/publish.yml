@@ -8,6 +8,9 @@ on:
 permissions:
   contents: read
 
+env:
+  FLUTTER_VERSION: '3.50.1'
+
 concurrency:
   group: publish-${{ github.ref }}
   cancel-in-progress: false
@@ -26,6 +29,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Verify tag matches pubspec version
@@ -77,10 +81,14 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - name: Cache Gradle dependencies
+        uses: gradle/actions/setup-gradle@v5
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Verify tag matches pubspec version
@@ -108,15 +116,15 @@ jobs:
 
       - name: Run Android integration tests
         uses: reactivecircus/android-emulator-runner@v2
+        timeout-minutes: 20
         with:
           api-level: 35
           arch: x86_64
           profile: pixel_6
           working-directory: example
           script: |
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/integration_test.dart --target=integration_test/plugin_integration_test.dart
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/android_lifecycle_test.dart
-            flutter drive --no-dds --timeout=1200 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
+            flutter drive --no-pub --no-dds --timeout=480 -d emulator-5554 --driver=test_driver/android_lifecycle_test.dart --target=integration_test/ci_playback.dart
+            flutter drive --no-pub --no-dds --timeout=480 -d emulator-5554 --dart-define=VLC_PLAYER_FORMAT_SUITE=smoke --driver=test_driver/integration_test.dart --target=integration_test/format_compatibility_test.dart
 
   validate-windows:
     name: Validate Windows release
@@ -131,6 +139,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Verify tag matches pubspec version
@@ -178,6 +187,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Verify tag matches pubspec version
@@ -230,6 +240,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
       - name: Install dependencies
