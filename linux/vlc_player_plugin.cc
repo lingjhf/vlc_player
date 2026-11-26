@@ -7,6 +7,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -247,12 +248,21 @@ class LinuxVlcPlayer {
     fl_event_channel_set_stream_handlers(event_channel_, Listen, Cancel, this,
                                          nullptr);
 
-    core_ = std::make_unique<vlc_player::VlcPlayerCore>(options, [this] {
-      if (!disposed_.load() && texture_ != nullptr) {
-        fl_texture_registrar_mark_texture_frame_available(
-            texture_registrar_, FL_TEXTURE(texture_));
-      }
-    });
+    core_ = std::make_unique<vlc_player::VlcPlayerCore>(
+        options, [this](bool video_format_changed) {
+          if (disposed_.load() || texture_ == nullptr) {
+            return;
+          }
+          if (video_format_changed) {
+            {
+              std::lock_guard<std::mutex> lock(polling_mutex_);
+              snapshot_requested_ = true;
+            }
+            polling_condition_.notify_one();
+          }
+          fl_texture_registrar_mark_texture_frame_available(
+              texture_registrar_, FL_TEXTURE(texture_));
+        });
     if (!core_->is_valid()) {
       init_error_ = core_->error();
       return;
@@ -270,9 +280,19 @@ class LinuxVlcPlayer {
 
     polling_ = true;
     polling_thread_ = std::thread([this] {
-      while (polling_.load()) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+      std::unique_lock<std::mutex> lock(polling_mutex_);
+      while (polling_) {
+        polling_condition_.wait_for(lock, std::chrono::milliseconds(500),
+                                    [this] {
+                                      return !polling_ || snapshot_requested_;
+                                    });
+        if (!polling_) {
+          break;
+        }
+        snapshot_requested_ = false;
+        lock.unlock();
         SendSnapshot();
+        lock.lock();
       }
     });
   }
@@ -375,7 +395,11 @@ class LinuxVlcPlayer {
     if (disposed_.exchange(true)) {
       return;
     }
-    polling_ = false;
+    {
+      std::lock_guard<std::mutex> lock(polling_mutex_);
+      polling_ = false;
+    }
+    polling_condition_.notify_one();
     if (polling_thread_.joinable()) {
       polling_thread_.join();
     }
@@ -503,11 +527,14 @@ class LinuxVlcPlayer {
   std::unique_ptr<vlc_player::VlcPlayerCore> core_;
   std::string init_error_;
   std::atomic<bool> disposed_ = false;
-  std::atomic<bool> polling_ = false;
   std::atomic<bool> listening_ = false;
   std::mutex snapshot_mutex_;
   bool has_last_sent_snapshot_ = false;
   vlc_player::VlcSnapshot last_sent_snapshot_;
+  std::mutex polling_mutex_;
+  std::condition_variable polling_condition_;
+  bool polling_ = false;
+  bool snapshot_requested_ = false;
   std::thread polling_thread_;
   int64_t texture_id_ = -1;
 };

@@ -19,7 +19,7 @@ std::vector<std::string> VlcPlayerCoreTestOptions();
 namespace {
 
 std::unique_ptr<VlcPlayerCore> MakeCore() {
-  return std::make_unique<VlcPlayerCore>(VlcPlayerCoreTestOptions(), [] {});
+  return std::make_unique<VlcPlayerCore>(VlcPlayerCoreTestOptions(), [](bool) {});
 }
 
 }  // namespace
@@ -121,6 +121,8 @@ TEST(VlcPlayerCore, CopyPixelsWithoutFrameReturnsFalse) {
 
   ASSERT_TRUE(core->is_valid()) << core->error();
 
+  EXPECT_FALSE(core->CopyPixels(&buffer, &width, &height));
+  core->ResizeVideoBufferForTesting(4, 4, 16);
   EXPECT_FALSE(core->CopyPixels(&buffer, &width, &height));
   EXPECT_EQ(buffer, &sentinel);
   EXPECT_EQ(width, 7u);

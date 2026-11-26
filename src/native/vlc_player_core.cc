@@ -163,6 +163,12 @@ std::string VlcPlayerCore::SetSource(const std::string& uri,
   }
 
   {
+    std::lock_guard<std::mutex> lock(video_mutex_);
+    render_generation_ = 0;
+    texture_generation_ = 0;
+    video_format_pending_ = true;
+  }
+  {
     std::lock_guard<std::mutex> lock(state_mutex_);
     state_override_ = "opening";
     error_code_.clear();
@@ -479,8 +485,10 @@ VlcSnapshot VlcPlayerCore::Snapshot() {
                      !snapshot.is_seekable;
   {
     std::lock_guard<std::mutex> lock(video_mutex_);
-    snapshot.video_width = video_width_;
-    snapshot.video_height = video_height_;
+    if (render_generation_ != 0) {
+      snapshot.video_width = video_width_;
+      snapshot.video_height = video_height_;
+    }
   }
   return snapshot;
 }
@@ -489,7 +497,7 @@ bool VlcPlayerCore::CopyPixels(const uint8_t** out_buffer,
                                uint32_t* width,
                                uint32_t* height) {
   std::lock_guard<std::mutex> lock(video_mutex_);
-  if (render_buffer_.empty()) {
+  if (render_generation_ == 0) {
     return false;
   }
   if (texture_generation_ != render_generation_) {
@@ -526,6 +534,7 @@ uint32_t VlcPlayerCore::SetupFormat(char* chroma,
   pitches[0] = *width * 4;
   lines[0] = *height;
   ResizeVideoBuffer(*width, *height, pitches[0]);
+  video_format_pending_ = true;
   return 1;
 }
 
@@ -551,7 +560,7 @@ void VlcPlayerCore::Unlock(void* picture, void* const* planes) {
 
 void VlcPlayerCore::Display(void* picture) {
   if (!disposed_.load() && on_frame_available_) {
-    on_frame_available_();
+    on_frame_available_(video_format_pending_.exchange(false));
   }
 }
 
