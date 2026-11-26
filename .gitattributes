@@ -1,0 +1,4 @@
+# Flutter writes generated plugin registrants with LF on every platform.
+example/*/flutter/generated_plugin_registrant.* text eol=lf
+example/*/flutter/generated_plugins.cmake text eol=lf
+example/macos/Flutter/GeneratedPluginRegistrant.swift text eol=lf
