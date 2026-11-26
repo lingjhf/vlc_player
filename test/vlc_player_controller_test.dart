@@ -73,6 +73,18 @@ void main() {
       controller.dispose();
     });
 
+    test('preserves an exact VLC location when attaching', () async {
+      const location = 'udp://@127.0.0.1:12345';
+      final controller = VlcPlayerController();
+      await controller.setMedia(VlcMediaSource.location(location: location));
+      mockEventChannel(13);
+      await harness.attachController(controller, 13);
+
+      expect(calls.single.method, 'setSource');
+      expect((calls.single.arguments as Map)['uri'], location);
+      controller.dispose();
+    });
+
     test(
       'setMedia restores previous source when native loading fails',
       () async {

@@ -751,7 +751,7 @@ class _VlcPlayerController extends VlcPlayerController
   }) {
     return <String, Object?>{
       'viewId': viewId,
-      'uri': source.uri.toString(),
+      'uri': source.location,
       'autoPlay': autoPlay,
       'httpHeaders': source.httpHeaders,
       if (source.mediaOptions.isNotEmpty) 'mediaOptions': source.mediaOptions,
@@ -919,6 +919,8 @@ class _VlcPlayerController extends VlcPlayerController
         previousValue.isSeekable == nextValue.isSeekable &&
         previousValue.isLive == nextValue.isLive &&
         previousValue.videoSize == nextValue.videoSize &&
+        previousValue.videoPixelAspectRatio ==
+            nextValue.videoPixelAspectRatio &&
         previousValue.error == nextValue.error &&
         previousValue.errorDescription == nextValue.errorDescription;
   }

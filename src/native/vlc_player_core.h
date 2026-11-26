@@ -58,6 +58,9 @@ class VlcPlayerCore {
 
   VlcSnapshot Snapshot();
   bool CopyPixels(const uint8_t** out_buffer, uint32_t* width, uint32_t* height);
+  bool CopyPixelsTo(std::vector<uint8_t>* out_buffer,
+                    uint32_t* width,
+                    uint32_t* height);
   void Dispose();
 
 #ifdef VLC_PLAYER_TESTING

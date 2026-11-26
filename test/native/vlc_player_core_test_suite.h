@@ -50,6 +50,10 @@ TEST(VlcPlayerCore, SnapshotEqualityComparesPayloadFields) {
   second = first;
   second.error_description = "failed";
   EXPECT_NE(first, second);
+
+  second = first;
+  second.video_pixel_aspect_ratio = 1.5;
+  EXPECT_NE(first, second);
 }
 
 TEST(VlcPlayerCore, RejectsEmptySourceUri) {
@@ -175,6 +179,59 @@ TEST(VlcPlayerCore, CopyPixelsCopiesOnlyNewRenderGenerations) {
   EXPECT_EQ(buffer[0], 23u);
   EXPECT_EQ(core->TextureGenerationForTesting(),
             core->RenderGenerationForTesting());
+}
+
+TEST(VlcPlayerCore, OwnedPixelsSurviveLaterFramesAndResolutionChanges) {
+  auto core = MakeCore();
+  ASSERT_TRUE(core->is_valid()) << core->error();
+
+  std::vector<uint8_t> first;
+  std::vector<uint8_t> second;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  core->ResizeVideoBufferForTesting(2, 2, 8);
+  core->SimulateFrameForTesting(17);
+  ASSERT_TRUE(core->CopyPixelsTo(&first, &width, &height));
+  ASSERT_EQ(width, 2u);
+  ASSERT_EQ(height, 2u);
+  ASSERT_EQ(first.size(), 16u);
+
+  core->SimulateFrameForTesting(23);
+  ASSERT_TRUE(core->CopyPixelsTo(&second, &width, &height));
+  core->ResizeVideoBufferForTesting(3, 2, 12);
+  core->SimulateFrameForTesting(42);
+  core->Dispose();
+
+  EXPECT_EQ(first, std::vector<uint8_t>(16, 17));
+  EXPECT_EQ(second, std::vector<uint8_t>(16, 23));
+}
+
+TEST(VlcPlayerCore, SourceChangeHidesPreviousFrameAndDimensions) {
+  auto core = MakeCore();
+  ASSERT_TRUE(core->is_valid()) << core->error();
+  ASSERT_EQ(core->SetSource("file:///first.mp4", {}, {}, 0, false), "");
+  core->ResizeVideoBufferForTesting(2, 2, 8);
+  core->SimulateFrameForTesting(17);
+  EXPECT_EQ(core->Snapshot().video_width, 2u);
+
+  std::vector<uint8_t> pixels;
+  uint32_t width = 0;
+  uint32_t height = 0;
+  ASSERT_TRUE(core->CopyPixelsTo(&pixels, &width, &height));
+  ASSERT_EQ(core->SetSource("file:///second.mp4", {}, {}, 0, false), "");
+  const auto pending = core->Snapshot();
+  EXPECT_EQ(pending.video_width, 0u);
+  EXPECT_EQ(pending.video_height, 0u);
+  EXPECT_FALSE(core->CopyPixelsTo(&pixels, &width, &height));
+  EXPECT_EQ(pixels, std::vector<uint8_t>(16, 17));
+
+  core->ResizeVideoBufferForTesting(4, 2, 16);
+  EXPECT_FALSE(core->CopyPixelsTo(&pixels, &width, &height));
+  core->SimulateFrameForTesting(23);
+  ASSERT_TRUE(core->CopyPixelsTo(&pixels, &width, &height));
+  EXPECT_EQ(width, 4u);
+  EXPECT_EQ(height, 2u);
+  EXPECT_EQ(pixels, std::vector<uint8_t>(32, 23));
 }
 
 TEST(VlcPlayerCore, DisposeIsIdempotentAndGuardsCommands) {

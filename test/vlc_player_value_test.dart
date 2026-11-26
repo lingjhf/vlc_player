@@ -122,6 +122,31 @@ void main() {
       expect(value.videoSize, const Size(1920.5, 1080));
     });
 
+    test('tracks and clears pixel aspect ratio with the video', () {
+      final value = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'playing',
+        'videoSize': <String, Object?>{'width': 720, 'height': 576},
+        'videoPixelAspectRatio': 64 / 45,
+      }, const VlcPlayerValue());
+      expect(value.videoSize, const Size(720, 576));
+      expect(value.videoPixelAspectRatio, closeTo(64 / 45, 1e-9));
+      expect(value, isNot(value.copyWith(videoPixelAspectRatio: 1)));
+      final next = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'playing',
+      }, value);
+      expect(next.videoPixelAspectRatio, value.videoPixelAspectRatio);
+      final malformed = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'playing',
+        'videoPixelAspectRatio': -2,
+      }, value);
+      expect(malformed.videoPixelAspectRatio, 1);
+      final cleared = VlcPlayerValue.fromEvent(<String, Object?>{
+        'state': 'opening',
+      }, value);
+      expect(cleared.videoSize, isNull);
+      expect(cleared.videoPixelAspectRatio, 1);
+    });
+
     test('ignores malformed platform event fields without throwing', () {
       const previous = VlcPlayerValue(
         state: VlcPlaybackState.playing,

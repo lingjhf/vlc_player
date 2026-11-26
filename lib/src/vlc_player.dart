@@ -21,7 +21,7 @@ enum VlcVideoFit {
   /// Stretch the video to fill the widget bounds.
   fill,
 
-  /// Render the video at its natural decoded size when available.
+  /// Render at the video's natural display size when available.
   none,
 }
 
@@ -140,7 +140,11 @@ class _VlcPlayerState extends State<VlcPlayer> {
               return ValueListenableBuilder<VlcPlayerValue>(
                 valueListenable: widget.controller,
                 builder: (context, value, child) {
-                  return _fitTexture(textureId, value.videoSize);
+                  return _fitTexture(
+                    textureId,
+                    value.videoSize,
+                    value.videoPixelAspectRatio,
+                  );
                 },
               );
             }
@@ -214,29 +218,47 @@ class _VlcPlayerState extends State<VlcPlayer> {
     }
   }
 
-  Widget _fitTexture(int textureId, Size? videoSize) {
+  Widget _fitTexture(int textureId, Size? videoSize, double pixelAspectRatio) {
     final texture = Texture(textureId: textureId);
     if (widget.fit == VlcVideoFit.fill) {
       return SizedBox.expand(child: texture);
     }
-    if (videoSize == null) {
-      return const SizedBox.expand();
-    }
 
-    final sizedTexture = SizedBox(
-      width: videoSize.width,
-      height: videoSize.height,
-      child: texture,
-    );
-    return Center(
-      child: FittedBox(
+    var displaySize = Size.zero;
+    Widget? fittedTexture;
+    if (videoSize != null) {
+      final pixelAspect = pixelAspectRatio.isFinite && pixelAspectRatio > 0
+          ? pixelAspectRatio
+          : 1.0;
+      final adjustedWidth = videoSize.width * pixelAspect;
+      displaySize = Size(
+        adjustedWidth.isFinite ? adjustedWidth : videoSize.width,
+        videoSize.height,
+      );
+      fittedTexture = FittedBox(
         fit: switch (widget.fit) {
           VlcVideoFit.contain => BoxFit.contain,
           VlcVideoFit.cover => BoxFit.cover,
           VlcVideoFit.none => BoxFit.none,
           VlcVideoFit.fill => BoxFit.fill,
         },
-        child: sizedTexture,
+        clipBehavior: Clip.hardEdge,
+        child: SizedBox(
+          width: displaySize.width,
+          height: displaySize.height,
+          child: texture,
+        ),
+      );
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => SizedBox(
+        width: constraints.hasBoundedWidth
+            ? constraints.maxWidth
+            : displaySize.width,
+        height: constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : displaySize.height,
+        child: fittedTexture,
       ),
     );
   }

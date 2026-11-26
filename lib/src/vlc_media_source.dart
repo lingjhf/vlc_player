@@ -16,14 +16,48 @@ class VlcMediaSource {
   /// non-negative and is applied after the source is loaded when the platform
   /// backend supports seeking.
   VlcMediaSource({
-    required this.uri,
+    required Uri uri,
     Map<String, String> httpHeaders = const <String, String>{},
     List<String> mediaOptions = const <String>[],
-    this.startPosition = Duration.zero,
+    Duration startPosition = Duration.zero,
+  }) : this._(
+         uri: uri,
+         location: uri.toString(),
+         httpHeaders: httpHeaders,
+         mediaOptions: mediaOptions,
+         startPosition: startPosition,
+       );
+
+  /// Creates a source from an exact VLC media location.
+  ///
+  /// Use this for VLC locations whose syntax Dart's [Uri] normalizes, such as
+  /// `udp://@127.0.0.1:12345`. [location] is passed to the platform backend
+  /// unchanged; [uri] is its parsed representation and may serialize
+  /// differently. Platform backends may apply their own URL parsing. The
+  /// other arguments have the same meaning as the default constructor.
+  VlcMediaSource.location({
+    required String location,
+    Map<String, String> httpHeaders = const <String, String>{},
+    List<String> mediaOptions = const <String>[],
+    Duration startPosition = Duration.zero,
+  }) : this._(
+         uri: Uri.parse(location),
+         location: location,
+         httpHeaders: httpHeaders,
+         mediaOptions: mediaOptions,
+         startPosition: startPosition,
+       );
+
+  VlcMediaSource._({
+    required this.uri,
+    required this.location,
+    required Map<String, String> httpHeaders,
+    required List<String> mediaOptions,
+    required this.startPosition,
   }) : httpHeaders = Map<String, String>.unmodifiable(httpHeaders),
        mediaOptions = List<String>.unmodifiable(mediaOptions) {
-    if (uri.toString().isEmpty) {
-      throw ArgumentError.value(uri, 'uri', 'Must be non-empty.');
+    if (location.isEmpty) {
+      throw ArgumentError.value(location, 'location', 'Must be non-empty.');
     }
     if (startPosition.isNegative) {
       throw ArgumentError.value(
@@ -34,8 +68,11 @@ class VlcMediaSource {
     }
   }
 
-  /// Media URI to load.
+  /// Parsed representation of the media location.
   final Uri uri;
+
+  /// Exact media location sent to the platform backend.
+  final String location;
 
   /// HTTP headers used when opening [uri].
   final Map<String, String> httpHeaders;
@@ -50,7 +87,7 @@ class VlcMediaSource {
   bool operator ==(Object other) {
     return identical(this, other) ||
         other is VlcMediaSource &&
-            other.uri == uri &&
+            other.location == location &&
             mapEquals(other.httpHeaders, httpHeaders) &&
             listEquals(other.mediaOptions, mediaOptions) &&
             other.startPosition == startPosition;
@@ -58,7 +95,7 @@ class VlcMediaSource {
 
   @override
   int get hashCode => Object.hash(
-    uri,
+    location,
     Object.hashAll(_sortedHeaderHashes),
     Object.hashAll(mediaOptions),
     startPosition,
@@ -71,7 +108,7 @@ class VlcMediaSource {
 
   @override
   String toString() {
-    return 'VlcMediaSource(uri: $uri, httpHeaders: $httpHeaders, '
+    return 'VlcMediaSource(uri: $location, httpHeaders: $httpHeaders, '
         'mediaOptions: $mediaOptions, startPosition: $startPosition)';
   }
 }

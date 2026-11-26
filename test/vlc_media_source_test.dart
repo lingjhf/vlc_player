@@ -34,6 +34,23 @@ void main() {
 
     test('rejects empty uri', () {
       expect(() => VlcMediaSource(uri: Uri()), throwsA(isA<ArgumentError>()));
+      expect(
+        () => VlcMediaSource.location(location: ''),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+
+    test('preserves VLC locations that Uri normalizes', () {
+      const location = 'udp://@127.0.0.1:12345';
+      final source = VlcMediaSource.location(location: location);
+      final same = VlcMediaSource.location(location: location);
+      final normalized = VlcMediaSource(uri: Uri.parse(location));
+
+      expect(source.uri.toString(), 'udp://127.0.0.1:12345');
+      expect(source.location, location);
+      expect(source, same);
+      expect(source.hashCode, same.hashCode);
+      expect(source, isNot(normalized));
     });
 
     test('rejects negative start position', () {

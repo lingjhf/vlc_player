@@ -1,0 +1,16 @@
+--- a/libavcodec/shorten.c
++++ b/libavcodec/shorten.c
+@@ -818,3 +818,13 @@
+                       AV_CODEC_CAP_DELAY |
+                       AV_CODEC_CAP_DR1,
+ };
++
++/* Expose the original container header to the VLC Shorten demuxer. */
++const uint8_t *vlc_shorten_header(const AVCodecContext *ctx, int *size);
++const uint8_t *vlc_shorten_header(const AVCodecContext *ctx, int *size)
++{
++    const ShortenContext *s = ctx ? ctx->priv_data : NULL;
++    if (!s || !s->got_header) { *size = 0; return NULL; }
++    *size = s->header_size;
++    return s->header;
++}
