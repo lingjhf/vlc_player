@@ -1,4 +1,3 @@
-#include <flutter/binary_messenger.h>
 #include <flutter/method_call.h>
 #include <flutter/method_result_functions.h>
 #include <flutter/standard_method_codec.h>
@@ -19,6 +18,7 @@
 
 #include "vlc_player_plugin.h"
 #include "vlc_player_core.h"
+#include "vlc_player_transport.h"
 #include "windows_player_task_runner.h"
 
 namespace vlc_player {
@@ -42,51 +42,23 @@ bool PumpUntil(const std::function<bool()>& ready) {
   return ready();
 }
 
-class TestMessenger : public flutter::BinaryMessenger {
- public:
-  void Send(const std::string&, const uint8_t*, size_t,
-            flutter::BinaryReply) const override {
-    if (std::this_thread::get_id() != platform_thread_) {
-      ++off_platform_sends;
+struct TestPort {
+  int64_t id() const { return reinterpret_cast<intptr_t>(this); }
+
+  static bool Post(Dart_Port port, Dart_CObject* message) {
+    auto* receiver = reinterpret_cast<TestPort*>(static_cast<intptr_t>(port));
+    if (std::this_thread::get_id() != receiver->platform_thread) {
+      ++receiver->off_platform_sends;
     }
-    ++sent_events;
+    EXPECT_EQ(message->type, Dart_CObject_kTypedData);
+    EXPECT_EQ(message->value.as_typed_data.type, Dart_TypedData_kUint8);
+    ++receiver->received;
+    return true;
   }
 
-  void SetMessageHandler(const std::string& channel,
-                         flutter::BinaryMessageHandler handler) override {
-    if (std::this_thread::get_id() != platform_thread_) {
-      ++off_platform_updates;
-    }
-    active_handlers += handler ? 1 : -1;
-    std::lock_guard<std::mutex> lock(handler_mutex_);
-    if (handler) {
-      handlers_[channel] = std::move(handler);
-    } else {
-      handlers_.erase(channel);
-    }
-  }
-
-  void Listen(const std::string& channel) {
-    const auto message =
-        flutter::StandardMethodCodec::GetInstance().EncodeMethodCall(
-            flutter::MethodCall<EncodableValue>("listen", nullptr));
-    flutter::BinaryMessageHandler handler;
-    {
-      std::lock_guard<std::mutex> lock(handler_mutex_);
-      handler = handlers_.at(channel);
-    }
-    handler(message->data(), message->size(), [](const uint8_t*, size_t) {});
-  }
-
-  std::atomic<int> off_platform_updates{0};
-  std::atomic<int> active_handlers{0};
-  mutable std::atomic<int> off_platform_sends{0};
-  mutable std::atomic<int> sent_events{0};
-
- private:
-  std::thread::id platform_thread_ = std::this_thread::get_id();
-  std::mutex handler_mutex_;
-  std::map<std::string, flutter::BinaryMessageHandler> handlers_;
+  const std::thread::id platform_thread = std::this_thread::get_id();
+  std::atomic<int> received{0};
+  std::atomic<int> off_platform_sends{0};
 };
 
 class TestTextureRegistrar : public flutter::TextureRegistrar {
@@ -162,7 +134,7 @@ struct Result {
 std::shared_ptr<Result> Call(VlcPlayerPlugin& plugin, const std::string& method,
                              const EncodableMap& arguments) {
   auto result = std::make_shared<Result>();
-  plugin.HandleMethodCall(
+  plugin.HandleCommand(
       flutter::MethodCall<EncodableValue>(
           method, std::make_unique<EncodableValue>(arguments)),
       std::make_unique<flutter::MethodResultFunctions<>>(
@@ -238,22 +210,18 @@ int ThreadHandleCount() {
 }
 
 TEST(VlcPlayerLifecycle, FailedCreateDetachesOnPlatformThread) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto result = Call(plugin, "create", CreateArguments(true));
   EXPECT_FALSE(result->done);
   ASSERT_TRUE(PumpUntil([&] { return result->done; }));
   EXPECT_EQ(result->error, "create_failed");
   ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == 1; }));
-  EXPECT_EQ(messenger.off_platform_updates, 0);
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(VlcPlayerLifecycle, RepeatedFailedCreatesReleaseFlutterResources) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto warmup = Call(plugin, "create", CreateArguments(true));
   ASSERT_TRUE(PumpUntil([&] { return warmup->done; }));
   ASSERT_EQ(warmup->error, "create_failed");
@@ -264,14 +232,11 @@ TEST(VlcPlayerLifecycle, RepeatedFailedCreatesReleaseFlutterResources) {
     ASSERT_EQ(result->error, "create_failed");
     ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == index + 2; }));
   }
-  EXPECT_EQ(messenger.off_platform_updates, 0);
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(VlcPlayerLifecycle, DisposeDuringCreateCompletesWithoutPublishingPlayer) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto creation = Call(plugin, "create", CreateArguments());
   EXPECT_FALSE(creation->done);
   auto disposal = Call(plugin, "dispose", ViewArguments(1));
@@ -279,14 +244,11 @@ TEST(VlcPlayerLifecycle, DisposeDuringCreateCompletesWithoutPublishingPlayer) {
   ASSERT_TRUE(PumpUntil([&] { return creation->done; }));
   EXPECT_EQ(creation->error, "player_not_found");
   ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == 1; }));
-  EXPECT_EQ(messenger.off_platform_updates, 0);
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(VlcPlayerLifecycle, RepeatedSuccessfulCreateAndDisposeReleasesResources) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto warmup = Call(plugin, "create", CreateArguments());
   ASSERT_TRUE(PumpUntil([&] { return warmup->done; }));
   ASSERT_TRUE(warmup->error.empty()) << warmup->error;
@@ -303,15 +265,12 @@ TEST(VlcPlayerLifecycle, RepeatedSuccessfulCreateAndDisposeReleasesResources) {
     EXPECT_TRUE(disposal->done);
     ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == index + 2; }));
   }
-  EXPECT_EQ(messenger.off_platform_updates, 0);
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(VlcPlayerLifecycle, TextureCallbackSurvivesAsynchronousUnregister) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
   registrar.delay_unregister = true;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto creation = Call(plugin, "create", CreateArguments());
   ASSERT_TRUE(PumpUntil([&] { return creation->done; }));
   ASSERT_TRUE(creation->error.empty()) << creation->error;
@@ -330,10 +289,9 @@ TEST(VlcPlayerLifecycle, TextureCallbackSurvivesAsynchronousUnregister) {
 }
 
 TEST(VlcPlayerLifecycle, SubmittedPixelsRemainStableUntilFlutterReleasesThem) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
   registrar.delay_unregister = true;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto creation = Call(plugin, "create", CreateArguments());
   ASSERT_TRUE(PumpUntil([&] { return creation->done; }));
   ASSERT_TRUE(creation->error.empty()) << creation->error;
@@ -410,27 +368,37 @@ TEST(VlcPlayerLifecycle, ReportsVisibleVideoSizeInsteadOfPaddedBufferSize) {
 }
 
 TEST(VlcPlayerLifecycle, ShutdownDrainsPendingCreateOnPlatformThread) {
-  TestMessenger messenger;
   TestTextureRegistrar registrar;
-  auto plugin = std::make_unique<VlcPlayerPlugin>(&messenger, &registrar);
+  auto plugin = std::make_unique<VlcPlayerPlugin>(&registrar);
   auto creation = Call(*plugin, "create", CreateArguments());
   EXPECT_FALSE(creation->done);
   plugin.reset();
   EXPECT_TRUE(creation->done);
   EXPECT_EQ(creation->error, "player_not_found");
   EXPECT_EQ(registrar.unregistered, 1);
-  EXPECT_EQ(messenger.off_platform_updates, 0);
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(VlcPlayerLifecycle, PollingPlaybackEventsStayOnPlatformThread) {
-  TestMessenger messenger;
+  TestPort events;
+  TestPort reply;
   TestTextureRegistrar registrar;
-  VlcPlayerPlugin plugin(&messenger, &registrar);
+  VlcPlayerPlugin plugin(&registrar);
   auto creation = Call(plugin, "create", CreateArguments());
   ASSERT_TRUE(PumpUntil([&] { return creation->done; }));
   ASSERT_TRUE(creation->error.empty()) << creation->error;
-  messenger.Listen("vlc_player/events/1");
+  const auto send = [&](const char* method, EncodableMap arguments) {
+    auto message = flutter::StandardMethodCodec::GetInstance().EncodeMethodCall(
+        flutter::MethodCall<EncodableValue>(
+            method, std::make_unique<EncodableValue>(std::move(arguments))));
+    return vlc_player_dispatch(plugin.engine_id(), reply.id(),
+                               reinterpret_cast<void*>(&TestPort::Post),
+                               message->data(), message->size());
+  };
+  EncodableMap subscription = ViewArguments(1);
+  subscription[EncodableValue("eventPort")] = EncodableValue(events.id());
+  ASSERT_EQ(send("listen", subscription), 1);
+  ASSERT_TRUE(PumpUntil([&] { return reply.received == 1; }));
+  EXPECT_EQ(events.received, 1);
   EncodableMap arguments = ViewArguments(1);
   arguments[EncodableValue("uri")] =
       EncodableValue(std::string("file:///") + VLC_PLAYER_TEST_MEDIA_PATH);
@@ -438,13 +406,17 @@ TEST(VlcPlayerLifecycle, PollingPlaybackEventsStayOnPlatformThread) {
   auto source = Call(plugin, "setSource", arguments);
   ASSERT_TRUE(source->done);
   ASSERT_TRUE(source->error.empty()) << source->error;
-  const int immediate_events = messenger.sent_events;
+  const int immediate_events = events.received;
   ASSERT_TRUE(
-      PumpUntil([&] { return messenger.sent_events > immediate_events; }));
-  EXPECT_EQ(messenger.off_platform_sends, 0);
+      PumpUntil([&] { return events.received > immediate_events; }));
+  EXPECT_EQ(events.off_platform_sends, 0);
+  ASSERT_EQ(send("cancel", subscription), 1);
+  ASSERT_TRUE(PumpUntil([&] { return reply.received == 2; }));
+  const int final_events = events.received;
+  Call(plugin, "pause", ViewArguments(1));
+  EXPECT_EQ(events.received, final_events);
   Call(plugin, "dispose", ViewArguments(1));
   ASSERT_TRUE(PumpUntil([&] { return registrar.unregistered == 1; }));
-  EXPECT_EQ(messenger.active_handlers, 0);
 }
 
 TEST(WindowsPlayerTaskRunner, ReusesAndReleasesWorkerThreadHandles) {

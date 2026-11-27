@@ -5,19 +5,21 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
 /** Android implementation for the vlc_player plugin. */
-class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
+class VlcPlayerPlugin : FlutterPlugin {
     private val players = HashMap<Long, VlcPlayerPlatformView>()
-    private var channel: MethodChannel? = null
+    private var bootstrap: MethodChannel? = null
+    private var engineId: Long = 0
 
     override fun onAttachedToEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        val messenger = binding.binaryMessenger
-        channel = MethodChannel(messenger, CHANNEL_NAME).also {
-            it.setMethodCallHandler(this)
+        engineId = VlcNativeTransport.attach(this)
+        bootstrap = MethodChannel(binding.binaryMessenger, "vlc_player/transport").also {
+            it.setMethodCallHandler { call, result ->
+                if (call.method == "engineId") result.success(engineId) else result.notImplemented()
+            }
         }
         binding.platformViewRegistry.registerViewFactory(
             VIEW_TYPE,
             VlcPlayerViewFactory(
-                messenger,
                 onCreate = { viewId, player ->
                     players.remove(viewId)?.dispose()
                     players[viewId] = player
@@ -31,7 +33,7 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         )
     }
 
-    override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
+    internal fun handleCommand(call: MethodCall, result: MethodChannel.Result, callback: Long) {
         val rawViewId = call.argument<Number>("viewId")
         if (rawViewId == null) {
             result.error("invalid_args", "A valid viewId is required.", null)
@@ -47,11 +49,28 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
 
         val player = players[viewId]
         if (player == null) {
+            if (call.method == "cancel") {
+                result.success(null)
+                return
+            }
             result.error("player_not_found", "No vlc_player player exists for viewId $viewId.", null)
             return
         }
 
         when (call.method) {
+            "listen", "cancel" -> {
+                val port = call.argument<Number>("eventPort")?.toLong()
+                if (port == null || port == 0L) {
+                    result.error("invalid_args", "A valid eventPort is required.", null)
+                    return
+                }
+                if (call.method == "listen") {
+                    player.listen(VlcNativeTransport.Port(port, callback))
+                } else {
+                    player.cancel(port)
+                }
+                result.success(null)
+            }
             "setSource" -> {
                 val uri = call.argument<String>("uri")
                 val autoPlay = call.argument<Boolean>("autoPlay") == true
@@ -156,8 +175,10 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        channel?.setMethodCallHandler(null)
-        channel = null
+        bootstrap?.setMethodCallHandler(null)
+        bootstrap = null
+        VlcNativeTransport.detach(engineId)
+        engineId = 0
         players.values.toList().forEach { it.dispose() }
         players.clear()
     }
@@ -167,7 +188,6 @@ class VlcPlayerPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     }
 
     private companion object {
-        const val CHANNEL_NAME = "vlc_player"
         const val VIEW_TYPE = "plugins.lingjhf.com/vlc_player/view"
     }
 }

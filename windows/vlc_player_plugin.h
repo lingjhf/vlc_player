@@ -16,6 +16,8 @@
 #include <mutex>
 #include <unordered_map>
 
+#include "vlc_dart_port.h"
+
 namespace vlc_player {
 
 class WindowsVlcPlayer;
@@ -28,18 +30,21 @@ class VlcPlayerPlugin : public flutter::Plugin {
       flutter::PluginRegistrarWindows *registrar,
       FlutterDesktopPluginRegistrarRef core_registrar);
 
-  VlcPlayerPlugin(flutter::BinaryMessenger *messenger,
-                  flutter::TextureRegistrar *texture_registrar,
-                  FlutterDesktopMessengerRef messenger_ref = nullptr);
+  explicit VlcPlayerPlugin(flutter::TextureRegistrar *texture_registrar);
 
   virtual ~VlcPlayerPlugin();
 
   VlcPlayerPlugin(const VlcPlayerPlugin &) = delete;
   VlcPlayerPlugin &operator=(const VlcPlayerPlugin &) = delete;
 
-  void HandleMethodCall(
+  void HandleCommand(
       const flutter::MethodCall<flutter::EncodableValue> &method_call,
-      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result);
+      std::unique_ptr<flutter::MethodResult<flutter::EncodableValue>> result,
+      PostCObject post = nullptr);
+
+  int64_t engine_id() const { return engine_id_; }
+  static bool Dispatch(int64_t engine_id, DartPort reply,
+                       const uint8_t* request, size_t size);
 
  private:
   std::shared_ptr<WindowsVlcPlayer> FindPlayer(
@@ -48,9 +53,10 @@ class VlcPlayerPlugin : public flutter::Plugin {
 
   void DisposePlayer(int64_t view_id);
 
-  flutter::BinaryMessenger *messenger_;
   flutter::TextureRegistrar *texture_registrar_;
-  FlutterDesktopMessengerRef messenger_ref_;
+  FlutterDesktopMessengerRef messenger_ref_ = nullptr;
+  std::unique_ptr<flutter::MethodChannel<flutter::EncodableValue>> bootstrap_;
+  int64_t engine_id_;
   int64_t next_view_id_ = 1;
   bool shutting_down_ = false;
   std::mutex players_mutex_;

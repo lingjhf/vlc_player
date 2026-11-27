@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
+import 'package:vlc_player/src/vlc_player_transport.dart';
 import 'package:vlc_player/vlc_player.dart';
 import 'package:vlc_player_example/main.dart';
 
@@ -107,10 +108,9 @@ void main() {
         return;
       }
 
-      const channel = MethodChannel('vlc_player');
       for (var iteration = 0; iteration < 8; iteration++) {
         await expectLater(
-          channel.invokeMethod<Object?>('create', <String, Object?>{
+          invokePlayer<Object?>('create', <String, Object?>{
             'options': <String>['--vlc-player-test-invalid-option'],
           }),
           throwsA(
@@ -122,15 +122,14 @@ void main() {
           ),
         );
 
-        final player = await channel.invokeMapMethod<String, Object?>(
-          'create',
-          <String, Object?>{'options': headlessPlayerOptions()},
-        );
+        final player = await invokePlayerMap('create', <String, Object?>{
+          'options': headlessPlayerOptions(),
+        });
         expect(player?['viewId'], isA<int>());
         expect(player?['textureId'], isA<int>());
         final arguments = <String, Object?>{'viewId': player!['viewId']};
-        await channel.invokeMethod<void>('dispose', arguments);
-        await channel.invokeMethod<void>('dispose', arguments);
+        await invokePlayer<void>('dispose', arguments);
+        await invokePlayer<void>('dispose', arguments);
       }
     },
   );

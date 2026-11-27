@@ -3,9 +3,6 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
-#include <flutter/event_channel.h>
-#include <flutter/event_sink.h>
-#include <flutter/event_stream_handler_functions.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
@@ -28,6 +25,7 @@
 #include <vector>
 
 #include "vlc_player_core.h"
+#include "vlc_player_transport.h"
 #include "windows_player_task_runner.h"
 
 namespace vlc_player {
@@ -36,6 +34,34 @@ namespace {
 using EncodableList = flutter::EncodableList;
 using EncodableMap = flutter::EncodableMap;
 using EncodableValue = flutter::EncodableValue;
+
+std::mutex engines_mutex;
+std::unordered_map<int64_t, VlcPlayerPlugin*> engines;
+int64_t next_engine_id = 1;
+
+class NativeResult : public flutter::MethodResult<EncodableValue> {
+ public:
+  explicit NativeResult(DartPort reply) : reply_(reply) {}
+
+ protected:
+  void SuccessInternal(const EncodableValue* result) override {
+    auto envelope = flutter::StandardMethodCodec::GetInstance()
+                        .EncodeSuccessEnvelope(result);
+    reply_.Send(envelope->data(), envelope->size());
+  }
+
+  void ErrorInternal(const std::string& code, const std::string& message,
+                     const EncodableValue* details) override {
+    auto envelope = flutter::StandardMethodCodec::GetInstance()
+                        .EncodeErrorEnvelope(code, message, details);
+    reply_.Send(envelope->data(), envelope->size());
+  }
+
+  void NotImplementedInternal() override { reply_.Send(nullptr, 0); }
+
+ private:
+  DartPort reply_;
+};
 
 std::wstring ExecutableDirectory() {
   std::wstring path(MAX_PATH, L'\0');
@@ -330,37 +356,10 @@ struct WindowsVlcTextureState {
 
 class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
  public:
-  WindowsVlcPlayer(int64_t view_id, flutter::BinaryMessenger *messenger,
-                   flutter::TextureRegistrar *texture_registrar,
-                   FlutterDesktopMessengerRef messenger_ref,
+  WindowsVlcPlayer(flutter::TextureRegistrar *texture_registrar,
                    WindowsPlayerTaskRunner *task_runner)
       : texture_registrar_(texture_registrar),
-        messenger_ref_(messenger_ref),
-        task_runner_(task_runner),
-        event_channel_(messenger, "vlc_player/events/" + std::to_string(view_id),
-                       &flutter::StandardMethodCodec::GetInstance()) {
-    auto stream_handler =
-        std::make_unique<flutter::StreamHandlerFunctions<EncodableValue>>(
-            [this](const EncodableValue *arguments,
-                   std::unique_ptr<flutter::EventSink<EncodableValue>> &&events)
-                -> std::unique_ptr<
-                    flutter::StreamHandlerError<EncodableValue>> {
-              {
-                std::lock_guard<std::mutex> lock(event_mutex_);
-                event_sink_ = std::move(events);
-              }
-              SendSnapshot(true);
-              return nullptr;
-            },
-            [this](const EncodableValue *arguments)
-                -> std::unique_ptr<
-                    flutter::StreamHandlerError<EncodableValue>> {
-              std::lock_guard<std::mutex> lock(event_mutex_);
-              event_sink_.reset();
-              return nullptr;
-            });
-    event_channel_.SetStreamHandler(std::move(stream_handler));
-
+        task_runner_(task_runner) {
     texture_ = std::make_shared<flutter::TextureVariant>(
         flutter::PixelBufferTexture([state = texture_state_](size_t, size_t) {
           return state->CopyPixelBuffer();
@@ -508,19 +507,25 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
   EncodableMap GetMediaInfo() { return MediaInfo(core_->GetMediaInfo()); }
   EncodableMap GetMediaStats() { return MediaStats(core_->GetMediaStats()); }
 
+  void Listen(DartPort port) {
+    {
+      std::lock_guard<std::mutex> lock(event_mutex_);
+      event_port_ = port;
+    }
+    SendSnapshot(true);
+  }
+
+  void Cancel(int64_t port) {
+    std::lock_guard<std::mutex> lock(event_mutex_);
+    if (event_port_.id == port) event_port_ = {};
+  }
+
   void DetachFromFlutter() {
     if (flutter_detached_.exchange(true)) {
       return;
     }
-    {
-      std::lock_guard<std::mutex> lock(event_mutex_);
-      event_sink_.reset();
-    }
-    // The engine can invalidate its messenger before destroying its plugins.
-    if (messenger_ref_ == nullptr ||
-        FlutterDesktopMessengerIsAvailable(messenger_ref_)) {
-      event_channel_.SetStreamHandler(nullptr);
-    }
+    std::lock_guard<std::mutex> lock(event_mutex_);
+    event_port_ = {};
   }
 
   void DisposeCore() {
@@ -564,7 +569,7 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
     }
     {
       std::lock_guard<std::mutex> lock(event_mutex_);
-      if (!event_sink_) {
+      if (!event_port_) {
         return;
       }
     }
@@ -572,7 +577,7 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
     const VlcSnapshot snapshot = core_->Snapshot();
 
     std::lock_guard<std::mutex> lock(event_mutex_);
-    if (!event_sink_) {
+    if (!event_port_) {
       return;
     }
     if (!force && has_last_sent_snapshot_ &&
@@ -618,14 +623,12 @@ class WindowsVlcPlayer : public std::enable_shared_from_this<WindowsVlcPlayer> {
           EncodableValue(snapshot.error_description);
     }
 
-    event_sink_->Success(EncodableValue(event));
+    NativeResult(event_port_).Success(EncodableValue(std::move(event)));
   }
 
   flutter::TextureRegistrar *texture_registrar_;
-  FlutterDesktopMessengerRef messenger_ref_;
   WindowsPlayerTaskRunner *task_runner_;
-  flutter::EventChannel<EncodableValue> event_channel_;
-  std::unique_ptr<flutter::EventSink<EncodableValue>> event_sink_;
+  DartPort event_port_;
   std::mutex event_mutex_;
   bool has_last_sent_snapshot_ = false;
   VlcSnapshot last_sent_snapshot_;
@@ -656,40 +659,49 @@ void VlcPlayerPlugin::RegisterWithRegistrar(
 void VlcPlayerPlugin::RegisterWithRegistrar(
     flutter::PluginRegistrarWindows *registrar,
     FlutterDesktopPluginRegistrarRef core_registrar) {
-  auto channel =
+  auto plugin = std::make_unique<VlcPlayerPlugin>(registrar->texture_registrar());
+  plugin->bootstrap_ =
       std::make_unique<flutter::MethodChannel<EncodableValue>>(
-          registrar->messenger(), "vlc_player",
+          registrar->messenger(), "vlc_player/transport",
           &flutter::StandardMethodCodec::GetInstance());
 
-  FlutterDesktopMessengerRef messenger_ref = nullptr;
   if (core_registrar != nullptr) {
     FlutterDesktopMessengerRef registrar_messenger =
         FlutterDesktopPluginRegistrarGetMessenger(core_registrar);
     if (registrar_messenger != nullptr) {
-      messenger_ref = FlutterDesktopMessengerAddRef(registrar_messenger);
+      plugin->messenger_ref_ = FlutterDesktopMessengerAddRef(registrar_messenger);
     }
   }
 
-  auto plugin = std::make_unique<VlcPlayerPlugin>(
-      registrar->messenger(), registrar->texture_registrar(), messenger_ref);
-
-  channel->SetMethodCallHandler(
-      [plugin_pointer = plugin.get()](const auto &call, auto result) {
-        plugin_pointer->HandleMethodCall(call, std::move(result));
+  plugin->bootstrap_->SetMethodCallHandler(
+      [id = plugin->engine_id()](const auto &call, auto result) {
+        if (call.method_name() == "engineId") {
+          result->Success(EncodableValue(id));
+        } else {
+          result->NotImplemented();
+        }
       });
 
   registrar->AddPlugin(std::move(plugin));
 }
 
-VlcPlayerPlugin::VlcPlayerPlugin(flutter::BinaryMessenger *messenger,
-                                 flutter::TextureRegistrar *texture_registrar,
-                                 FlutterDesktopMessengerRef messenger_ref)
-    : messenger_(messenger),
-      texture_registrar_(texture_registrar),
-      messenger_ref_(messenger_ref),
-      task_runner_(std::make_unique<WindowsPlayerTaskRunner>()) {}
+VlcPlayerPlugin::VlcPlayerPlugin(flutter::TextureRegistrar *texture_registrar)
+    : texture_registrar_(texture_registrar),
+      task_runner_(std::make_unique<WindowsPlayerTaskRunner>()) {
+  std::lock_guard<std::mutex> lock(engines_mutex);
+  engine_id_ = next_engine_id++;
+  engines.emplace(engine_id_, this);
+}
 
 VlcPlayerPlugin::~VlcPlayerPlugin() {
+  {
+    std::lock_guard<std::mutex> lock(engines_mutex);
+    engines.erase(engine_id_);
+  }
+  if (bootstrap_ && (messenger_ref_ == nullptr ||
+                     FlutterDesktopMessengerIsAvailable(messenger_ref_))) {
+    bootstrap_->SetMethodCallHandler(nullptr);
+  }
   shutting_down_ = true;
   {
     std::lock_guard<std::mutex> lock(players_mutex_);
@@ -711,9 +723,42 @@ VlcPlayerPlugin::~VlcPlayerPlugin() {
   }
 }
 
-void VlcPlayerPlugin::HandleMethodCall(
+bool VlcPlayerPlugin::Dispatch(int64_t engine_id, DartPort reply,
+                               const uint8_t* request, size_t size) {
+  std::vector<uint8_t> message(request, request + size);
+  std::lock_guard<std::mutex> lock(engines_mutex);
+  const auto found = engines.find(engine_id);
+  if (found == engines.end() || !found->second->task_runner_->is_valid()) {
+    return false;
+  }
+  auto* plugin = found->second;
+  plugin->task_runner_->PostPlatformTask(
+      [plugin, message = std::move(message), reply] {
+        if (plugin->shutting_down_) {
+          NativeResult(reply).Error("native_transport_unavailable",
+                                    "The Flutter engine detached.");
+          return;
+        }
+        try {
+          auto command = flutter::StandardMethodCodec::GetInstance()
+                             .DecodeMethodCall(message);
+          if (!command) {
+            NativeResult(reply).Error("invalid_args", "Invalid VLC command.");
+            return;
+          }
+          plugin->HandleCommand(*command, std::make_unique<NativeResult>(reply),
+                                reply.post);
+        } catch (const std::exception& error) {
+          NativeResult(reply).Error("vlc_error", error.what());
+        }
+      });
+  return true;
+}
+
+void VlcPlayerPlugin::HandleCommand(
     const flutter::MethodCall<EncodableValue> &method_call,
-    std::unique_ptr<flutter::MethodResult<EncodableValue>> result) {
+    std::unique_ptr<flutter::MethodResult<EncodableValue>> result,
+    PostCObject post) {
   const auto *arguments = std::get_if<EncodableMap>(method_call.arguments());
 
   if (method_call.method_name() == "create") {
@@ -732,8 +777,7 @@ void VlcPlayerPlugin::HandleMethodCall(
       return;
     }
     auto player = std::make_shared<WindowsVlcPlayer>(
-        view_id, messenger_, texture_registrar_, messenger_ref_,
-        task_runner_.get());
+        texture_registrar_, task_runner_.get());
     if (player->texture_id() == -1) {
       result->Error("create_failed", player->error());
       return;
@@ -802,13 +846,33 @@ void VlcPlayerPlugin::HandleMethodCall(
     return;
   }
 
+  if (method_call.method_name() == "cancel") {
+    int64_t port = 0;
+    if (!ReadInt64(*arguments, "eventPort", &port) || port == 0) {
+      result->Error("invalid_args", "A valid eventPort is required.");
+      return;
+    }
+    std::lock_guard<std::mutex> lock(players_mutex_);
+    const auto player = players_.find(view_id);
+    if (player != players_.end()) player->second->Cancel(port);
+    result->Success();
+    return;
+  }
+
   std::shared_ptr<WindowsVlcPlayer> player = FindPlayer(*arguments, result.get());
   if (!player) {
     return;
   }
 
   std::string error;
-  if (method_call.method_name() == "setSource") {
+  if (method_call.method_name() == "listen") {
+    int64_t port = 0;
+    if (!ReadInt64(*arguments, "eventPort", &port) || !DartPort{port, post}) {
+      result->Error("invalid_args", "A valid eventPort is required.");
+      return;
+    }
+    player->Listen({port, post});
+  } else if (method_call.method_name() == "setSource") {
     int64_t start_position = 0;
     if (ReadInt64(*arguments, "startPosition", &start_position) &&
         start_position < 0) {
@@ -980,3 +1044,17 @@ void VlcPlayerPlugin::DisposePlayer(int64_t view_id) {
 }
 
 }  // namespace vlc_player
+
+int32_t vlc_player_dispatch(int64_t engine_id, int64_t reply_port,
+                            void* post_c_object, const uint8_t* request,
+                            intptr_t size) {
+  const vlc_player::DartPort reply{
+      reply_port, reinterpret_cast<vlc_player::PostCObject>(post_c_object)};
+  if (!reply || !request || size <= 0) return 0;
+  try {
+    return vlc_player::VlcPlayerPlugin::Dispatch(
+        engine_id, reply, request, static_cast<size_t>(size));
+  } catch (const std::exception&) {
+    return 0;
+  }
+}

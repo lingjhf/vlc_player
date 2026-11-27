@@ -11,6 +11,7 @@ import 'vlc_player_controller_internals.dart';
 import 'vlc_player_error.dart';
 import 'vlc_player_operation_queue.dart';
 import 'vlc_player_session.dart';
+import 'vlc_player_transport.dart';
 import 'vlc_player_value.dart';
 
 /// Playlist repeat behavior used by `VlcPlayerController.setPlaylist`.
@@ -222,8 +223,6 @@ abstract class VlcPlayerController extends ValueNotifier<VlcPlayerValue> {
   /// Returns runtime statistics for the current media session.
   Future<VlcMediaStats> getMediaStats();
 }
-
-const MethodChannel _methodChannel = MethodChannel('vlc_player');
 
 class _VlcPlayerController extends VlcPlayerController
     implements VlcPlayerControllerInternals {
@@ -761,18 +760,14 @@ class _VlcPlayerController extends VlcPlayerController
   }
 
   Future<T?> _invokeNative<T>(String method, Map<String, Object?> arguments) {
-    return _mapPlatformException(
-      () => _methodChannel.invokeMethod<T>(method, arguments),
-    );
+    return _mapPlatformException(() => invokePlayer<T>(method, arguments));
   }
 
   Future<Map<String, Object?>?> _invokeNativeMap(
     String method,
     Map<String, Object?> arguments,
   ) {
-    return _mapPlatformException(
-      () => _methodChannel.invokeMapMethod<String, Object?>(method, arguments),
-    );
+    return _mapPlatformException(() => invokePlayerMap(method, arguments));
   }
 
   static Future<T> _mapPlatformException<T>(
@@ -802,9 +797,7 @@ class _VlcPlayerController extends VlcPlayerController
   }
 
   Future<void> _disposeNativeView(int viewId) {
-    return _methodChannel.invokeMethod<void>('dispose', <String, Object?>{
-      'viewId': viewId,
-    });
+    return invokePlayer<void>('dispose', <String, Object?>{'viewId': viewId});
   }
 
   void _handleEvent(Object? event) {

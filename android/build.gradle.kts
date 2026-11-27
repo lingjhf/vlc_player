@@ -1,3 +1,5 @@
+import java.util.Properties
+
 group = "com.lingjhf.vlc_player"
 version = "1.0-SNAPSHOT"
 
@@ -25,10 +27,15 @@ plugins {
     id("com.android.library")
 }
 
+val flutterSdk = Properties().apply {
+    rootProject.file("local.properties").inputStream().use { load(it) }
+}.getProperty("flutter.sdk")
+
 android {
     namespace = "com.lingjhf.vlc_player"
 
     compileSdk = 36
+    ndkVersion = "28.2.13676358"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -46,6 +53,19 @@ android {
 
     defaultConfig {
         minSdk = 29
+        consumerProguardFiles("consumer-rules.pro")
+        externalNativeBuild {
+            cmake {
+                arguments += "-DDART_SDK_INCLUDE=$flutterSdk/bin/cache/dart-sdk/include"
+            }
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.22.1"
+        }
     }
 
     testOptions {

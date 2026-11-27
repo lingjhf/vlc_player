@@ -39,6 +39,11 @@ add_library(${PLUGIN_NAME} SHARED
 # full control over build settings.
 apply_standard_settings(${PLUGIN_NAME})
 
+get_directory_property(VLC_PLAYER_FLUTTER_ROOT
+  DIRECTORY "${FLUTTER_MANAGED_DIR}" DEFINITION FLUTTER_ROOT)
+set(VLC_PLAYER_DART_INCLUDE "${VLC_PLAYER_FLUTTER_ROOT}/bin/cache/dart-sdk/include")
+target_include_directories(${PLUGIN_NAME} PRIVATE "${VLC_PLAYER_DART_INCLUDE}")
+
 # Symbols are hidden by default to reduce the chance of accidental conflicts
 # between plugins. This should not be removed; any symbols that should be
 # exported should be explicitly exported with the FLUTTER_PLUGIN_EXPORT macro.
@@ -472,6 +477,7 @@ target_compile_definitions(${TEST_RUNNER} PRIVATE
   VLC_PLAYER_TEST_MEDIA_PATH="${CMAKE_CURRENT_SOURCE_DIR}/../example/assets/format_fixtures/video.mp4")
 target_include_directories(${TEST_RUNNER} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(${TEST_RUNNER} PRIVATE
+  "${VLC_PLAYER_DART_INCLUDE}"
   "${CMAKE_CURRENT_SOURCE_DIR}/../src/native"
   "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/libvlcpp"
   "${VLC_PLAYER_RUNTIME_DIR}/sdk/include")
