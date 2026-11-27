@@ -6,16 +6,19 @@ import android.content.ContextWrapper
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.Rect
+import android.media.MediaExtractor
+import android.media.MediaFormat
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import android.util.Size
 import android.view.PixelCopy
 import android.view.View
-import io.flutter.plugin.common.BinaryMessenger
-import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.platform.PlatformView
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.Executors
+import java.util.concurrent.Future
 import org.videolan.libvlc.LibVLC
 import org.videolan.libvlc.Media
 import org.videolan.libvlc.MediaPlayer
@@ -26,7 +29,6 @@ import org.videolan.libvlc.util.VLCVideoLayout
 
 internal class VlcPlayerPlatformView(
     private val context: Context,
-    messenger: BinaryMessenger,
     viewIdentifier: Int,
     options: ArrayList<String>,
     fit: String,
@@ -36,9 +38,9 @@ internal class VlcPlayerPlatformView(
     private val videoLayout = VLCVideoLayout(context)
     private val libVLC = LibVLC(context, options)
     private val mediaPlayer = MediaPlayer(libVLC)
+    private val videoSizeExecutor = Executors.newSingleThreadExecutor()
     private val videoScale = scaleTypeFor(fit)
-    private val eventChannel = EventChannel(messenger, "vlc_player/events/$viewIdentifier")
-    private val streamHandler = StreamHandler()
+    private var eventPort: VlcNativeTransport.Port? = null
     private val viewId = viewIdentifier.toLong()
     private val attachStateListener = object : View.OnAttachStateChangeListener {
         override fun onViewAttachedToWindow(view: View) {
@@ -106,6 +108,10 @@ internal class VlcPlayerPlatformView(
     private var detachingViews = false
     private var attachViewsPosted = false
     private var disposed = false
+    private var sourceUri: Uri? = null
+    private var extractedVideoSize: Size? = null
+    private var videoSizeProbe: Future<*>? = null
+    private var probedDvdTitle: Int? = null
 
     init {
         videoLayout.setBackgroundColor(Color.BLACK)
@@ -114,7 +120,6 @@ internal class VlcPlayerPlatformView(
         mediaPlayer.setEventListener(this)
         mediaPlayer.vlcVout.addCallback(voutCallback)
         scheduleAttachViews()
-        eventChannel.setStreamHandler(streamHandler)
     }
 
     override fun getView(): View = videoLayout
@@ -132,8 +137,16 @@ internal class VlcPlayerPlatformView(
         }
 
         try {
-            val media = Media(libVLC, Uri.parse(uri))
+            val nextUri = Uri.parse(uri)
+            val media = Media(libVLC, nextUri)
             try {
+                if (isLocalDvdImage(nextUri) &&
+                    isDvdNavigation(nextUri) &&
+                    mediaOptions.none { it.startsWith(":codec=") }
+                ) {
+                    // Some Android MPEG-2 hardware decoders never display the short still menu.
+                    media.setHWDecoderEnabled(false, false)
+                }
                 httpHeaders.forEach { (name, value) ->
                     if (isValidHeader(name, value)) {
                         media.addOption(":http-header=$name: $value")
@@ -149,6 +162,11 @@ internal class VlcPlayerPlatformView(
             } finally {
                 media.release()
             }
+            videoSizeProbe?.cancel(true)
+            videoSizeProbe = null
+            extractedVideoSize = null
+            probedDvdTitle = null
+            sourceUri = nextUri
             errorCode = null
             errorDescription = null
             lastSentEvent = null
@@ -393,19 +411,38 @@ internal class VlcPlayerPlatformView(
         info["album"] = media.getMeta(IMedia.Meta.Album)
         info["duration"] = maxOf(media.duration, playerLength, 0L)
 
-        val videoTracks = ArrayList<Map<String, Any?>>()
+        val videoTracks = ArrayList<IMedia.Track>()
         val audioTracks = ArrayList<Map<String, Any?>>()
         val subtitleTracks = ArrayList<Map<String, Any?>>()
         for (index in 0 until media.trackCount) {
             val track = media.getTrack(index) ?: continue
-            val trackInfo = mediaTrackInfo(track)
             when (track.type) {
-                IMedia.Track.Type.Video -> videoTracks.add(trackInfo)
-                IMedia.Track.Type.Audio -> audioTracks.add(trackInfo)
-                IMedia.Track.Type.Text -> subtitleTracks.add(trackInfo)
+                IMedia.Track.Type.Video -> videoTracks.add(track)
+                IMedia.Track.Type.Audio -> audioTracks.add(mediaTrackInfo(track))
+                IMedia.Track.Type.Text -> subtitleTracks.add(mediaTrackInfo(track))
             }
         }
-        info["videoTracks"] = videoTracks
+        val extractedSize = extractedVideoSize
+            ?.takeIf { sourceUri?.let(::dvdTitle) == probedDvdTitle }
+        val trackForExtractedSize = extractedSize?.let {
+            videoTracks.singleOrNull() ?: run {
+                val selectedId = mediaPlayer.videoTrack
+                videoTracks.singleOrNull { selectedId >= 0 && it.id == selectedId }
+            }
+        }
+        info["videoTracks"] = videoTracks.map { track ->
+            val trackInfo = mediaTrackInfo(track)
+            if (extractedSize != null && track === trackForExtractedSize &&
+                (trackInfo["width"] == null || trackInfo["height"] == null)
+            ) {
+                trackInfo + mapOf(
+                    "width" to extractedSize.width,
+                    "height" to extractedSize.height,
+                )
+            } else {
+                trackInfo
+            }
+        }
         info["audioTracks"] = audioTracks
         info["subtitleTracks"] = subtitleTracks
         return info
@@ -426,7 +463,8 @@ internal class VlcPlayerPlatformView(
             return
         }
         disposed = true
-        eventChannel.setStreamHandler(null)
+        videoSizeExecutor.shutdownNow()
+        eventPort = null
         mediaPlayer.setEventListener(null)
         videoLayout.removeOnAttachStateChangeListener(attachStateListener)
         videoLayout.removeOnLayoutChangeListener(layoutChangeListener)
@@ -626,9 +664,8 @@ internal class VlcPlayerPlatformView(
     }
 
     private fun sendSnapshot(force: Boolean = false) {
-        if (disposed) {
-            return
-        }
+        if (disposed) return
+        val port = eventPort ?: return
 
         val duration = mediaPlayer.length.coerceAtLeast(0L)
         val isSeekable = mediaPlayer.isSeekable
@@ -643,8 +680,8 @@ internal class VlcPlayerPlatformView(
         event["isReady"] = isReadyState(state)
         event["isSeekable"] = isSeekable
         event["isLive"] = isLiveState(state) && duration == 0L && !isSeekable
-        videoSize()?.let {
-            event["videoSize"] = it
+        videoSize()?.let { size ->
+            event["videoSize"] = mapOf("width" to size.width, "height" to size.height)
         }
         bufferingProgress?.let {
             event["bufferingProgress"] = it
@@ -657,43 +694,61 @@ internal class VlcPlayerPlatformView(
             return
         }
         lastSentEvent = HashMap(event)
-        streamHandler.send(event)
+        port.sendEvent(event)
     }
 
-    private fun videoSize(): Map<String, Int>? {
-        val track = mediaPlayer.currentVideoTrack ?: return null
-        val width = track.width
-        val height = track.height
-        if (width <= 0 || height <= 0) {
-            return null
-        }
-        return mapOf("width" to width, "height" to height)
+    fun listen(port: VlcNativeTransport.Port) {
+        eventPort = port
+        sendSnapshot(force = true)
     }
 
-    private inner class StreamHandler : EventChannel.StreamHandler {
-        private var events: EventChannel.EventSink? = null
+    fun cancel(port: Long) {
+        if (eventPort?.id == port) eventPort = null
+    }
 
-        override fun onListen(arguments: Any?, events: EventChannel.EventSink) {
-            this.events = events
-            sendSnapshot(force = true)
+    private fun videoSize(): Size? {
+        val uri = sourceUri
+        val dvdTitle = uri?.let(::dvdTitle)
+        if (dvdTitle != probedDvdTitle) {
+            videoSizeProbe?.cancel(true)
+            videoSizeProbe = null
+            extractedVideoSize = null
+            probedDvdTitle = dvdTitle
         }
-
-        override fun onCancel(arguments: Any?) {
-            events = null
+        val track = mediaPlayer.currentVideoTrack
+        if (track != null && track.width > 0 && track.height > 0) {
+            return Size(track.width, track.height)
         }
-
-        fun send(event: Map<String, Any?>) {
-            if (Looper.myLooper() == Looper.getMainLooper()) {
-                sendOnMainThread(event)
-            } else {
-                mainHandler.post { sendOnMainThread(event) }
+        extractedVideoSize?.let { return it }
+        val path = uri?.path ?: return null
+        if (dvdTitle == null && uri.scheme != "file") return null
+        if (videoSizeProbe == null &&
+            (state == STATE_PLAYING || state == STATE_PAUSED) &&
+            (track != null || mediaPlayer.videoTracksCount > 0)
+        ) {
+            // LibVLC can decode MPEG program streams without reporting their dimensions.
+            videoSizeProbe = videoSizeExecutor.submit {
+                val dvdSize = dvdTitle?.let { VlcNativeTransport.dvdVideoSize(path, it) }
+                val size = dvdSize
+                    ?: (if (uri.scheme == "file") extractVideoSize(path) else null)
+                    ?: return@submit
+                mainHandler.post {
+                    if (!disposed && sourceUri === uri && probedDvdTitle == dvdTitle) {
+                        extractedVideoSize = size
+                        sendSnapshot()
+                    }
+                }
             }
         }
+        return null
+    }
 
-        private fun sendOnMainThread(event: Map<String, Any?>) {
-            if (!disposed) {
-                events?.success(event)
-            }
+    private fun dvdTitle(uri: Uri): Int? {
+        if (!isLocalDvdImage(uri)) return null
+        if (isDvdNavigation(uri)) return mediaPlayer.title.coerceAtLeast(0)
+        return when (uri.scheme) {
+            "dvdread", "dvdsimple" -> mediaPlayer.title.coerceAtLeast(0) + 1
+            else -> null
         }
     }
 
@@ -708,6 +763,38 @@ internal class VlcPlayerPlatformView(
         const val STATE_ERROR = "error"
         const val ERROR_PLAYBACK = "playback_error"
         const val ERROR_SET_SOURCE_FAILED = "set_source_failed"
+
+        fun isLocalDvdImage(uri: Uri): Boolean =
+            uri.path?.endsWith(".iso", ignoreCase = true) == true &&
+                (uri.host.isNullOrEmpty() || uri.host == "localhost")
+
+        fun isDvdNavigation(uri: Uri): Boolean =
+            uri.scheme == "file" || uri.scheme == "dvd" || uri.scheme == "dvdnav"
+
+        fun extractVideoSize(path: String): Size? {
+            val extractor = MediaExtractor()
+            try {
+                extractor.setDataSource(path)
+                var result: Size? = null
+                for (index in 0 until extractor.trackCount) {
+                    val format = extractor.getTrackFormat(index)
+                    if (format.getString(MediaFormat.KEY_MIME)?.startsWith("video/") != true) continue
+                    if (result != null ||
+                        !format.containsKey(MediaFormat.KEY_WIDTH) ||
+                        !format.containsKey(MediaFormat.KEY_HEIGHT)
+                    ) return null
+                    val width = format.getInteger(MediaFormat.KEY_WIDTH)
+                    val height = format.getInteger(MediaFormat.KEY_HEIGHT)
+                    if (width <= 0 || height <= 0) return null
+                    result = Size(width, height)
+                }
+                return result
+            } catch (_: Exception) {
+                return null
+            } finally {
+                extractor.release()
+            }
+        }
 
         fun scaleTypeFor(fit: String): ScaleType {
             return when (fit) {

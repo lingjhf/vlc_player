@@ -1,8 +1,7 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
-
 import 'vlc_player_controller_internals.dart';
+import 'vlc_player_transport.dart';
 
 /// Owns native resources for one widget, including unfinished attachments.
 class VlcPlayerSession implements VlcPlayerBinding {
@@ -94,17 +93,14 @@ class VlcPlayerSession implements VlcPlayerBinding {
       }
       _ensureCurrent(attachment);
       attachment.attached = true;
-      attachment.subscription =
-          EventChannel(
-            'vlc_player/events/${attachment.viewId}',
-          ).receiveBroadcastStream().listen(
-            (event) {
-              if (_isCurrent(attachment)) onEvent(event);
-            },
-            onError: (Object error) {
-              if (_isCurrent(attachment)) onError(error);
-            },
-          );
+      attachment.subscription = playerEvents(attachment.viewId!).listen(
+        (event) {
+          if (_isCurrent(attachment)) onEvent(event);
+        },
+        onError: (Object error) {
+          if (_isCurrent(attachment)) onError(error);
+        },
+      );
       await onAttached(attachment.viewId!);
       _ensureCurrent(attachment);
     } catch (_) {

@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -48,6 +50,12 @@ const List<_FormatCase> _smokeFormats = <_FormatCase>[
     hlsPlaylistAssetPath: '$_assetRoot/hls/playlist.m3u8',
     hlsSegmentAssetPath: '$_assetRoot/hls/segment.ts',
     expectsVideo: true,
+  ),
+  _FormatCase(
+    name: 'MPEG-PS',
+    assetPath: '$_assetRoot/video_ps.mpg',
+    expectsVideo: true,
+    androidVideoSize: Size(160, 96),
   ),
 ];
 
@@ -136,6 +144,7 @@ class _FormatCase {
     this.expectsVideo = false,
     this.expectsAudio = false,
     this.subtitleAssetPath,
+    this.androidVideoSize,
   }) : assert(
          assetPath != null ||
              (hlsPlaylistAssetPath != null && hlsSegmentAssetPath != null),
@@ -148,6 +157,7 @@ class _FormatCase {
   final bool expectsVideo;
   final bool expectsAudio;
   final String? subtitleAssetPath;
+  final Size? androidVideoSize;
 }
 
 Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
@@ -189,7 +199,16 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
     await _verifyExternalSubtitle(tester, controller, subtitleAssetPath);
   }
 
-  final value = await _waitForUsablePlayback(tester, controller, format.name);
+  await _waitForUsablePlayback(tester, controller, format.name);
+  final androidVideoSize = format.androidVideoSize;
+  if (Platform.isAndroid && androidVideoSize != null) {
+    await pumpUntil(
+      tester,
+      () => controller.value.videoSize == androidVideoSize,
+      description: '${format.name} video size $androidVideoSize',
+    );
+  }
+  final value = controller.value;
   final info = await controller.getMediaInfo();
 
   expect(value.hasError, isFalse);
@@ -199,6 +218,11 @@ Future<void> _runFormatCase(WidgetTester tester, _FormatCase format) async {
       isTrue,
       reason: '${format.name} should expose video metadata.',
     );
+  }
+  if (Platform.isAndroid && androidVideoSize != null) {
+    final track = info.videoTracks.single;
+    expect(track.width, androidVideoSize.width.toInt());
+    expect(track.height, androidVideoSize.height.toInt());
   }
   if (format.expectsAudio) {
     expect(
@@ -260,7 +284,7 @@ Future<Uri> _materializeSource(_FormatCase format) async {
   );
 }
 
-Future<VlcPlayerValue> _waitForUsablePlayback(
+Future<void> _waitForUsablePlayback(
   WidgetTester tester,
   VlcPlayerController controller,
   String name,
@@ -272,7 +296,7 @@ Future<VlcPlayerValue> _waitForUsablePlayback(
       fail('$name entered error state: ${value.error}');
     }
     if (_usableStates.contains(value.state) || value.isReady) {
-      return value;
+      return;
     }
   }
   fail('$name did not become playable. Last value: ${controller.value.state}');

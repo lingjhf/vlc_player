@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:vlc_player/src/vlc_player_controller_internals.dart';
+import 'package:vlc_player/src/vlc_player_transport.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 class VlcMethodChannelHarness {
@@ -18,6 +19,7 @@ class VlcMethodChannelHarness {
   }
 
   void install({Future<Object?> Function(MethodCall call)? onCall}) {
+    debugUsePlatformChannelsForVlcPlayer = true;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(methodChannel, (call) async {
           calls.add(call);
@@ -86,6 +88,7 @@ class VlcMethodChannelHarness {
   }
 
   void dispose() {
+    debugUsePlatformChannelsForVlcPlayer = false;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(methodChannel, null);
     for (final channel in _eventChannels) {

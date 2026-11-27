@@ -27,14 +27,14 @@ using flutter::MethodResultFunctions;
 }  // namespace
 
 TEST(VlcPlayerPlugin, MissingPlayerReturnsPlayerNotFound) {
-  VlcPlayerPlugin plugin(nullptr, nullptr);
+  VlcPlayerPlugin plugin(nullptr);
 
   std::string error_code;
   std::string error_message;
   EncodableMap arguments;
   arguments[EncodableValue("viewId")] = EncodableValue(int64_t{42});
 
-  plugin.HandleMethodCall(
+  plugin.HandleCommand(
       MethodCall("play", std::make_unique<EncodableValue>(arguments)),
       std::make_unique<MethodResultFunctions<>>(
           nullptr,

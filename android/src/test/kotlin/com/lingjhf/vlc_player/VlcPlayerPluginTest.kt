@@ -17,12 +17,12 @@ import kotlin.test.Test
 
 internal class VlcPlayerPluginTest {
     @Test
-    fun onMethodCall_withoutViewId_returnsInvalidArgs() {
+    fun commandWithoutViewIdReturnsInvalidArgs() {
         val plugin = VlcPlayerPlugin()
 
         val call = MethodCall("play", null)
         val mockResult: MethodChannel.Result = Mockito.mock(MethodChannel.Result::class.java)
-        plugin.onMethodCall(call, mockResult)
+        plugin.handleCommand(call, mockResult, 0)
 
         Mockito.verify(mockResult).error(
             "invalid_args",

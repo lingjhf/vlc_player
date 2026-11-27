@@ -20,6 +20,7 @@ fi
 command -v swift >/dev/null
 command -v afconvert >/dev/null
 command -v python3 >/dev/null
+command -v ffmpeg >/dev/null
 
 mkdir -p "$output_dir/hls"
 
@@ -140,6 +141,9 @@ run_vlc() {
 
 swift "$tmp_dir/make_video.swift" "$output_dir/video.mp4" public.mpeg-4
 swift "$tmp_dir/make_video.swift" "$output_dir/video.mov" com.apple.quicktime-movie
+ffmpeg -hide_banner -loglevel error -nostdin -f lavfi \
+  -i 'testsrc2=size=160x96:rate=15' -an -t 5 -c:v mpeg2video \
+  -q:v 8 -pix_fmt yuv420p -f vob -y "$output_dir/video_ps.mpg"
 
 run_vlc -I dummy --play-and-exit "$output_dir/video.mp4" \
   --sout "#standard{access=file,mux=ts,dst=$output_dir/video.ts}" \

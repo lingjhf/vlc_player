@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:vlc_player/src/vlc_player_transport.dart';
 import 'package:vlc_player/vlc_player.dart';
 
 void main() {
@@ -12,7 +13,9 @@ void main() {
   const methodChannel = MethodChannel('vlc_player');
   final eventChannels = <EventChannel>[];
 
+  setUp(() => debugUsePlatformChannelsForVlcPlayer = true);
   tearDown(() {
+    debugUsePlatformChannelsForVlcPlayer = false;
     debugDefaultTargetPlatformOverride = null;
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(methodChannel, null);
