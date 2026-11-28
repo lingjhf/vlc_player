@@ -1,11 +1,13 @@
 # Changelog
 
-## Unreleased
+## 3.1.0 - 2026-11-28
 
 ### Breaking
 
-- Requires Swift Package Manager for Apple builds and raises the minimum
-  deployment targets to iOS 15 and macOS 12.
+- **Apple platforms support SwiftPM only.** Migrate iOS and macOS builds from
+  CocoaPods to Swift Package Manager before upgrading.
+- The minimum deployment targets are iOS 15 and macOS 12, matching Flutter
+  3.50.1.
 
 ### Changed
 
