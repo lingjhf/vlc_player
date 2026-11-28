@@ -1,6 +1,12 @@
+#if os(iOS)
+import Flutter
+import MobileVLCKit
+import UIKit
+#elseif os(macOS)
 import Cocoa
 import FlutterMacOS
 import VLCKit
+#endif
 
 public class VlcPlayerPlugin: NSObject, FlutterPlugin {
   private let messenger: FlutterBinaryMessenger
@@ -8,8 +14,13 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
   private var players: [Int64: VlcPlayerPlatformView] = [:]
 
   public static func register(with registrar: FlutterPluginRegistrar) {
-    let instance = VlcPlayerPlugin(binaryMessenger: registrar.messenger)
-    let factory = VlcPlayerViewFactory(messenger: registrar.messenger) { [weak instance] viewId, player in
+    #if os(iOS)
+    let messenger = registrar.messenger()
+    #elseif os(macOS)
+    let messenger = registrar.messenger
+    #endif
+    let instance = VlcPlayerPlugin(binaryMessenger: messenger)
+    let factory = VlcPlayerViewFactory(messenger: messenger) { [weak instance] viewId, player in
       instance?.players.removeValue(forKey: viewId)?.dispose()
       instance?.players[viewId] = player
     }
@@ -41,8 +52,14 @@ public class VlcPlayerPlugin: NSObject, FlutterPlugin {
       return
     }
 
-    DispatchQueue.main.async {
-      self.handle(call.method, arguments: arguments, player: player, result: result)
+    DispatchQueue.main.async { [player] in
+      player.whenSourceReady { [weak player] in
+        guard let player else {
+          result(Self.disposedError())
+          return
+        }
+        self.handle(call.method, arguments: arguments, player: player, result: result)
+      }
     }
   }
 
@@ -230,46 +247,97 @@ final class VlcPlayerViewFactory: NSObject, FlutterPlatformViewFactory {
     super.init()
   }
 
+  #if os(iOS)
+  func create(
+    withFrame frame: CGRect,
+    viewIdentifier viewId: Int64,
+    arguments args: Any?
+  ) -> FlutterPlatformView {
+    return createPlayer(frame: frame, viewId: viewId, arguments: args)
+  }
+
+  func createArgsCodec() -> FlutterMessageCodec & NSObjectProtocol {
+    return FlutterStandardMessageCodec.sharedInstance()
+  }
+  #elseif os(macOS)
   func create(withViewIdentifier viewId: Int64, arguments args: Any?) -> NSView {
-    let options = (args as? [String: Any])?["options"] as? [String] ?? []
-    let fit = (args as? [String: Any])?["fit"] as? String ?? "contain"
-    let platformView = VlcPlayerPlatformView(
-      viewId: viewId,
-      messenger: messenger,
-      options: options,
-      fit: fit
-    )
-    onCreate(viewId, platformView)
-    return platformView.view
+    return createPlayer(frame: .zero, viewId: viewId, arguments: args).nativeView
   }
 
   func createArgsCodec() -> (FlutterMessageCodec & NSObjectProtocol)? {
     return FlutterStandardMessageCodec.sharedInstance()
   }
+  #endif
+
+  private func createPlayer(frame: CGRect, viewId: Int64, arguments args: Any?) -> VlcPlayerPlatformView {
+    let arguments = args as? [String: Any]
+    let player = VlcPlayerPlatformView(
+      frame: frame,
+      viewId: viewId,
+      messenger: messenger,
+      options: arguments?["options"] as? [String] ?? [],
+      fit: arguments?["fit"] as? String ?? "contain"
+    )
+    onCreate(viewId, player)
+    return player
+  }
 }
 
-final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
-  let view: VlcPlayerContainerView
+final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate, VLCMediaDelegate {
+  private struct SourcePreparation {
+    let media: VLCMedia
+    let complete: (Bool) -> Void
+    var deferredCalls: [() -> Void] = []
+  }
+
+  private static let shortVideoContainers: Set<String> = ["mov", "mp4", "m4v", "mkv", "webm"]
+  private static let decoderThreadOptions: Set<String> = ["avcodec-threads"]
+  private static let hardwareDecoderOptions: Set<String> = ["avcodec-hw", "videotoolbox", "no-videotoolbox", "codec"]
+  private static let avformatCodecs: [String: UInt32] = [
+    "avi": 0x41524c55, // Ut Video ('ULRA')
+    "mov": 0x3176326d, // MPEG-2 with the 'm2v1' sample entry
+  ]
+
+  let nativeView: VlcPlayerContainerView
 
   private let mediaPlayer: VLCMediaPlayer
+  private let pausesAtEnd: Bool
+  private let playerOptions: [String]
   private let eventChannel: FlutterEventChannel
+  private var sourcePreparation: SourcePreparation?
   private let eventHandler = VlcPlayerEventStreamHandler()
   private var lastSentEvent: NSDictionary?
   private(set) var isDisposed = false
 
   init(
+    frame: CGRect,
     viewId: Int64,
     messenger: FlutterBinaryMessenger,
     options: [String],
     fit: String
   ) {
-    view = VlcPlayerContainerView()
-    mediaPlayer = VLCMediaPlayer(options: options)
+    #if os(iOS)
+    nativeView = VlcPlayerContainerView(frame: frame)
+    let usesDummyOutput = false
+    #elseif os(macOS)
+    nativeView = VlcPlayerContainerView()
+    let usesDummyOutput = options.contains("--vout=dummy")
+    #endif
+    if usesDummyOutput {
+      // Both the options initializer and attaching a drawable reset libVLC's vout.
+      mediaPlayer = VLCMediaPlayer(library: VLCLibrary(options: options))
+    } else {
+      mediaPlayer = VLCMediaPlayer(options: options)
+    }
+    pausesAtEnd = options.contains("--play-and-pause")
+    playerOptions = options
     eventChannel = FlutterEventChannel(name: "vlc_player/events/\(viewId)", binaryMessenger: messenger)
     super.init()
 
-    Self.applyFit(fit, to: view)
-    mediaPlayer.drawable = view
+    nativeView.applyFit(fit)
+    if !usesDummyOutput {
+      mediaPlayer.drawable = nativeView
+    }
     mediaPlayer.delegate = self
     eventHandler.onListen = { [weak self] in
       self?.sendSnapshot(force: true)
@@ -292,6 +360,10 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     }
 
     let media = VLCMedia(url: url)
+    // VLCKit defaults to pausing at EOF on macOS. Playlists need an ended event.
+    if !pausesAtEnd {
+      media.addOption(":no-play-and-pause")
+    }
     for (name, value) in httpHeaders where Self.isValidHeader(name: name, value: value) {
       media.addOption(":http-header=\(name): \(value)")
     }
@@ -301,6 +373,142 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     if startPosition > 0 {
       media.addOption(":start-time=\(Double(startPosition) / 1000.0)")
     }
+
+    let options = playerOptions + mediaOptions
+    #if os(macOS)
+    // VLCKit 3.7.3 can retain all frames of a short clip with frame threading.
+    let tuneThreads = !Self.hasOption(Self.decoderThreadOptions, in: options)
+    #else
+    let tuneThreads = false
+    #endif
+    #if os(iOS) && !targetEnvironment(simulator)
+    let tuneHardware = !Self.hasOption(Self.hardwareDecoderOptions, in: options)
+    #else
+    let tuneHardware = false
+    #endif
+    let fileExtension = url.pathExtension.lowercased()
+    let tuneDemux = !Self.hasOption(["demux"], in: options)
+    let avformatCodec = tuneDemux ? Self.avformatCodecs[fileExtension] : nil
+    if tuneDemux, fileExtension == "vc1", url.isFileURL,
+       (try? url.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true,
+       Self.hasVC1SequenceHeader(in: url) {
+      // Autodetection can select the MPEG video demuxer for raw VC-1.
+      media.addOption(":demux=vc1")
+    }
+    let tuneShortVideo = (tuneThreads || tuneHardware) && Self.shortVideoContainers.contains(fileExtension)
+    let canParseContainer = avformatCodec != nil || tuneShortVideo
+    let isElementaryHEVC = tuneHardware && (fileExtension == "hevc" || fileExtension == "h265")
+    if url.isFileURL, canParseContainer || isElementaryHEVC,
+       let properties = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+       properties.isRegularFile == true, let size = properties.fileSize {
+      if isElementaryHEVC, size <= 32 * 1024 {
+        // Tiny elementary HEVC streams have no container duration to parse.
+        Self.useSoftwareVideo(on: media)
+      } else if canParseContainer, size <= 4 * 1024 * 1024 {
+        prepareSource(media) { [weak self] parsed in
+          guard let self, !self.isDisposed else {
+            result(FlutterError(code: "disposed", message: "The vlc_player has been disposed.", details: nil))
+            return
+          }
+          if parsed {
+            if let avformatCodec,
+               (Self.firstVideoTrack(in: media)?[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value == avformatCodec {
+              media.addOption(":demux=avformat")
+            }
+            if tuneShortVideo {
+              Self.configureShortVideo(media, tuneThreads: tuneThreads, tuneHardware: tuneHardware)
+            }
+          }
+          self.startSource(media, autoPlay: autoPlay, result: result)
+        }
+        return
+      }
+    }
+    startSource(media, autoPlay: autoPlay, result: result)
+  }
+
+  func whenSourceReady(_ call: @escaping () -> Void) {
+    if sourcePreparation != nil {
+      sourcePreparation?.deferredCalls.append(call)
+    } else {
+      call()
+    }
+  }
+
+  private func prepareSource(_ media: VLCMedia, complete: @escaping (Bool) -> Void) {
+    sourcePreparation = SourcePreparation(media: media, complete: complete)
+    media.delegate = self
+    // Parse local metadata only and bound the delay before handing the source to VLC.
+    if media.parse(options: [], timeout: 200) != 0 {
+      finishSourcePreparation(media, parsed: false)
+      return
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(250)) { [weak self, weak media] in
+      if let media {
+        self?.finishSourcePreparation(media, parsed: false)
+      }
+    }
+  }
+
+  func mediaDidFinishParsing(_ media: VLCMedia) {
+    DispatchQueue.main.async { [weak self] in
+      self?.finishSourcePreparation(media, parsed: media.parsedStatus == .done)
+    }
+  }
+
+  private func finishSourcePreparation(_ media: VLCMedia, parsed: Bool) {
+    guard let preparation = sourcePreparation, preparation.media === media else { return }
+    sourcePreparation = nil
+    media.delegate = nil
+    if !parsed {
+      media.parseStop()
+    }
+    preparation.complete(parsed)
+    for call in preparation.deferredCalls {
+      whenSourceReady(call)
+    }
+  }
+
+  private static func configureShortVideo(_ media: VLCMedia, tuneThreads: Bool, tuneHardware: Bool) {
+    let duration = Self.milliseconds(from: media.length)
+    guard duration > 0, duration <= 500,
+          let videoTrack = Self.firstVideoTrack(in: media) else { return }
+
+    // Frame-threaded decoding can retain every displayable frame of a short clip until EOF.
+    if tuneThreads {
+      media.addOption(":avcodec-threads=1")
+    }
+    if tuneHardware, (videoTrack[VLCMediaTracksInformationCodec] as? NSNumber)?.uint32Value == 0x63766568 {
+      // HEVC ('hevc') can finish before VideoToolbox presents its first picture.
+      useSoftwareVideo(on: media)
+    }
+  }
+
+  private static func firstVideoTrack(in media: VLCMedia) -> [String: Any]? {
+    let tracks = media.tracksInformation as? [[String: Any]]
+    return tracks?.first { Self.trackType($0[VLCMediaTracksInformationType]) == "video" }
+  }
+
+  private static func hasVC1SequenceHeader(in url: URL) -> Bool {
+    guard let file = try? FileHandle(forReadingFrom: url) else { return false }
+    defer { try? file.close() }
+    return (try? file.read(upToCount: 4)) == Data([0x00, 0x00, 0x01, 0x0f])
+  }
+
+  private static func useSoftwareVideo(on media: VLCMedia) {
+    media.addOption(":no-videotoolbox")
+    media.addOption(":avcodec-hw=none")
+  }
+
+  private static func hasOption(_ names: Set<String>, in options: [String]) -> Bool {
+    let prefixes = CharacterSet(charactersIn: ":-")
+    return options.contains { option in
+      let name = option.prefix(while: { $0 != "=" }).trimmingCharacters(in: prefixes)
+      return names.contains(name)
+    }
+  }
+
+  private func startSource(_ media: VLCMedia, autoPlay: Bool, result: FlutterResult) {
     mediaPlayer.media = media
     sendSnapshot(force: true, stateOverride: "opening")
     if autoPlay {
@@ -352,6 +560,10 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
   func takeSnapshot(width: Int, height: Int, result: @escaping FlutterResult) {
     guard mediaPlayer.media != nil else {
       result(FlutterError(code: "snapshot_failed", message: "No media is loaded.", details: nil))
+      return
+    }
+    guard mediaPlayer.hasVideoOut else {
+      result(FlutterError(code: "snapshot_failed", message: "No video output is available.", details: nil))
       return
     }
 
@@ -465,6 +677,9 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       return
     }
     isDisposed = true
+    if let sourcePreparation {
+      finishSourcePreparation(sourcePreparation.media, parsed: false)
+    }
     eventChannel.setStreamHandler(nil)
     mediaPlayer.delegate = nil
     mediaPlayer.stop()
@@ -492,14 +707,17 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
     errorCode: String? = nil,
     errorDescription: String? = nil
   ) {
-    guard !isDisposed else {
+    guard !isDisposed, sourcePreparation == nil else {
       return
     }
     guard eventHandler.isListening else {
       return
     }
 
-    let stateName = stateOverride ?? Self.stateName(mediaPlayer.state)
+    let state = mediaPlayer.state
+    // VLCKit caches buffering and track events even after libVLC starts playback.
+    let isPlaying = (state == .buffering || state == .esAdded) && mediaPlayer.isPlaying
+    let stateName = stateOverride ?? (isPlaying ? "playing" : Self.stateName(state))
     let duration = Self.milliseconds(from: mediaPlayer.media?.length)
     let isSeekable = mediaPlayer.isSeekable
     var event: [String: Any] = [
@@ -564,10 +782,6 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
       "sentBytes": 0,
       "sendBitrate": 0.0,
     ]
-  }
-
-  private static func applyFit(_ fit: String, to view: VLCVideoView) {
-    view.fillScreen = fit == "cover" || fit == "fill"
   }
 
   private func trackDescriptions(indexes: [Any]?, names: [Any]?) -> [[String: Any?]] {
@@ -670,7 +884,36 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate {
   }
 }
 
-final class VlcPlayerContainerView: VLCVideoView {}
+#if os(iOS)
+extension VlcPlayerPlatformView: FlutterPlatformView {
+  func view() -> UIView {
+    return nativeView
+  }
+}
+
+final class VlcPlayerContainerView: UIView {
+  func applyFit(_ fit: String) {
+    backgroundColor = .black
+    clipsToBounds = true
+    switch fit {
+    case "cover":
+      contentMode = .scaleAspectFill
+    case "fill":
+      contentMode = .scaleToFill
+    case "none":
+      contentMode = .center
+    default:
+      contentMode = .scaleAspectFit
+    }
+  }
+}
+#elseif os(macOS)
+final class VlcPlayerContainerView: VLCVideoView {
+  func applyFit(_ fit: String) {
+    fillScreen = fit == "cover" || fit == "fill"
+  }
+}
+#endif
 
 final class VlcPlayerEventStreamHandler: NSObject, FlutterStreamHandler {
   private var eventSink: FlutterEventSink?

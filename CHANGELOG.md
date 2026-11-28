@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- Requires Swift Package Manager for Apple builds and raises the minimum
+  deployment targets to iOS 15 and macOS 12.
+
+### Changed
+
+- Shares the iOS and macOS player implementation in `darwin/` and uses
+  MobileVLCKit 3.7.5 on iOS and VLCKit 3.7.3 on macOS.
+
+### Fixed
+
+- Reports playback after VLCKit finishes buffering and returns a snapshot
+  error when VLC has no video output.
+- Lets macOS playlists advance when a source reaches the end naturally.
+- Uses single-threaded decoding for short macOS video clips that otherwise
+  finish before a frame is presented.
+- Uses software decoding for short HEVC clips on physical iOS devices to
+  reduce the chance of playback ending before the first frame.
+- Selects compatible demuxers on iOS and macOS for small local Ut Video AVI and
+  `m2v1` MPEG-2 MOV files, and for local raw VC-1 streams.
+
 ## 3.0.0 - 2026-11-27
 
 ### Breaking

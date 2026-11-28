@@ -54,18 +54,16 @@ Network playback requires internet access. The plugin manifest declares:
 
 ### iOS
 
-The iOS implementation requires iOS 13 or newer.
-
-The iOS implementation depends on `MobileVLCKit`.
+The iOS implementation requires iOS 15 or newer. Swift Package Manager
+resolves the pinned `MobileVLCKit` 3.7.5 binary.
 
 HTTPS media URLs work without extra transport configuration. If your app plays
 non-HTTPS URLs, configure App Transport Security in the app's `Info.plist`.
 
 ### macOS
 
-The macOS implementation requires macOS 10.15 or newer.
-
-The macOS implementation depends on `VLCKit`.
+The macOS implementation requires macOS 12 or newer. Swift Package Manager
+resolves the pinned `VLCKit` 3.7.3 binary.
 
 For sandboxed apps that play network media, enable the network client
 entitlement:
@@ -75,8 +73,10 @@ entitlement:
 <true/>
 ```
 
-Use CocoaPods `1.13.0` or newer so the VLCKit runtime path script phase runs
-reliably.
+Both Apple platforms require Swift Package Manager integration in the host
+Flutter app. Flutter enables it by default. If your app previously disabled
+it, remove `flutter.config.enable-swift-package-manager: false` from its
+`pubspec.yaml` and run `flutter config --enable-swift-package-manager`.
 
 ### Windows
 
@@ -660,19 +660,6 @@ Check that:
 - iOS allows the URL through App Transport Security if it is not HTTPS.
 - Required HTTP headers are passed through `VlcMediaSource.httpHeaders`.
 - Linux has `libvlc-dev` and `vlc` installed.
-
-### macOS `Library not loaded: VLCKit`
-
-Run `pod install` in the macOS app directory and rebuild:
-
-```sh
-cd macos
-pod install
-cd ..
-flutter build macos
-```
-
-Also make sure CocoaPods is `1.13.0` or newer.
 
 ## Development checks
 

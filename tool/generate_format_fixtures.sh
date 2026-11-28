@@ -142,6 +142,9 @@ run_vlc() {
 swift "$tmp_dir/make_video.swift" "$output_dir/video.mp4" public.mpeg-4
 swift "$tmp_dir/make_video.swift" "$output_dir/video.mov" com.apple.quicktime-movie
 ffmpeg -hide_banner -loglevel error -nostdin -f lavfi \
+  -i 'testsrc2=size=96x64:rate=24' -frames:v 6 -an -c:v prores_ks \
+  -profile:v 2 -pix_fmt yuv422p10le -y "$output_dir/short_prores.mov"
+ffmpeg -hide_banner -loglevel error -nostdin -f lavfi \
   -i 'testsrc2=size=160x96:rate=15' -an -t 5 -c:v mpeg2video \
   -q:v 8 -pix_fmt yuv420p -f vob -y "$output_dir/video_ps.mpg"
 

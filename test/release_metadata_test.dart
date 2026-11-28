@@ -8,23 +8,7 @@ void main() {
 
     expect(_fileText('README.md'), contains('vlc_player: ^$version'));
     expect(_fileText('CHANGELOG.md'), contains('## $version - '));
-    expect(
-      _fileText('ios/vlc_player.podspec'),
-      contains("s.version          = '$version'"),
-    );
-    expect(
-      _fileText('macos/vlc_player.podspec'),
-      contains("s.version          = '$version'"),
-    );
     expect(_fileText('example/pubspec.lock'), contains('version: "$version"'));
-    expect(
-      _fileText('example/ios/Podfile.lock'),
-      contains('vlc_player ($version)'),
-    );
-    expect(
-      _fileText('example/macos/Podfile.lock'),
-      contains('vlc_player ($version)'),
-    );
   });
 
   test('pubspec description satisfies pub.dev length guidance', () {
@@ -33,45 +17,62 @@ void main() {
     expect(description.length, inInclusiveRange(50, 180));
   });
 
-  test('podspec metadata uses project owner and Flutter 3.44 source layout', () {
-    final podspecs = <String, String>{
-      'ios/vlc_player.podspec': "s.dependency 'MobileVLCKit', '3.7.3'",
-      'macos/vlc_player.podspec': "s.dependency 'VLCKit', '3.7.3'",
-    };
+  test('Apple plugins share a Swift package with pinned VLCKit binaries', () {
+    final pubspec = _fileText('pubspec.yaml');
+    for (final platform in ['ios', 'macos']) {
+      expect(
+        pubspec,
+        contains(
+          '$platform:\n'
+          '        pluginClass: VlcPlayerPlugin\n'
+          '        sharedDarwinSource: true',
+        ),
+      );
+    }
 
-    for (final entry in podspecs.entries) {
-      final podspec = _fileText(entry.key);
+    final manifest = _fileText('darwin/vlc_player/Package.swift');
+    expect(manifest, contains('platforms: [.iOS(.v15), .macOS(.v12)]'));
+    expect(manifest, contains('.library(name: "vlc-player"'));
+    expect(manifest, contains('.process("PrivacyInfo.xcprivacy")'));
+
+    const artifacts = {
+      'MobileVLCKit': (version: '3.7.5', tag: 'mobilevlckit-3.7.5-swiftpm'),
+      'VLCKit': (version: '3.7.3', tag: 'vlckit-3.7.3-swiftpm'),
+    };
+    for (final entry in artifacts.entries) {
+      final framework = entry.key;
+      final tag = RegExp.escape(entry.value.tag);
+      final version = RegExp.escape(entry.value.version);
       expect(
-        podspec,
-        contains(
-          "s.homepage         = 'https://github.com/lingjhf/vlc_player'",
+        manifest,
+        matches(
+          '\\.binaryTarget\\(\\s*name: "$framework",\\s*'
+          'url: "https://github\\.com/lingjhf/vlc_player/releases/download/'
+          '$tag/$framework-$version-swiftpm\\.xcframework\\.zip",\\s*'
+          'checksum: "[a-f0-9]{64}"',
         ),
       );
-      expect(
-        podspec,
-        contains(
-          "s.author           = { 'lingjhf' => 'lingjhf@users.noreply.github.com' }",
-        ),
-      );
-      expect(podspec, isNot(contains('https://flutter.dev')));
-      expect(podspec, isNot(contains('noreply@example.com')));
-      expect(
-        podspec,
-        contains("s.source_files = 'vlc_player/Sources/vlc_player/**/*.swift'"),
-      );
-      expect(
-        podspec,
-        contains(
-          "s.resource_bundles = {'vlc_player_privacy' => ['vlc_player/Sources/vlc_player/PrivacyInfo.xcprivacy']}",
-        ),
-      );
-      expect(podspec, contains(entry.value));
     }
   });
 
-  test('Swift package manager does not replace official VLCKit pods', () {
-    expect(File('ios/vlc_player/Package.swift').existsSync(), isFalse);
-    expect(File('macos/vlc_player/Package.swift').existsSync(), isFalse);
+  test('Apple plugin and example use Swift Package Manager only', () {
+    for (final path in [
+      'ios/vlc_player.podspec',
+      'macos/vlc_player.podspec',
+      'darwin/vlc_player.podspec',
+      'example/ios/Podfile',
+      'example/ios/Podfile.lock',
+      'example/macos/Podfile',
+      'example/macos/Podfile.lock',
+    ]) {
+      expect(File(path).existsSync(), isFalse, reason: path);
+    }
+    for (final path in ['pubspec.yaml', 'example/pubspec.yaml']) {
+      expect(
+        _fileText(path),
+        isNot(contains('enable-swift-package-manager: false')),
+      );
+    }
   });
 
   test('third-party notices are linked from README', () {

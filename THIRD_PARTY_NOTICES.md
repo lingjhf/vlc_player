@@ -16,8 +16,10 @@ libraries and bundled plugins.
 
 ## VLCKit and MobileVLCKit
 
-The iOS implementation depends on `MobileVLCKit`, and the macOS implementation
-depends on `VLCKit` through CocoaPods. Applications embedding this plugin are
+The iOS implementation depends on `MobileVLCKit` 3.7.5, and the macOS
+implementation depends on `VLCKit` 3.7.3. Swift Package Manager uses the
+VideoLAN XCFrameworks repackaged as ZIP archives. The macOS archive uses an
+`@rpath` install name. Applications embedding this plugin are
 responsible for satisfying the VLCKit and MobileVLCKit binary distribution
 requirements for their target platform.
 
