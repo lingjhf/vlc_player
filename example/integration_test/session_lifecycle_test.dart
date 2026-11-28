@@ -15,8 +15,21 @@ import 'test_support.dart';
 // --dart-define=VLC_PLAYER_AV_HOST=http://127.0.0.1:45939.
 const _audioHost = String.fromEnvironment('VLC_PLAYER_AV_HOST');
 
+// Keep decoded frames and snapshots available without a GPU on hosted macOS.
+const _macOSHeadlessVideo = bool.fromEnvironment(
+  'VLC_PLAYER_MACOS_HEADLESS_VIDEO',
+);
+const _softwareVideoOptions = [
+  '--vout=dummy',
+  '--no-videotoolbox',
+  '--avcodec-hw=none',
+];
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  final videoOptions = Platform.isMacOS && _macOSHeadlessVideo
+      ? _softwareVideoOptions
+      : const <String>[];
 
   testWidgets('macOS advances when a playlist item ends naturally', (
     tester,
@@ -66,7 +79,7 @@ void main() {
   testWidgets('Apple playback presents a frame from a six-frame ProRes clip', (
     tester,
   ) async {
-    final controller = VlcPlayerController();
+    final controller = VlcPlayerController(options: videoOptions);
     addTearDown(controller.dispose);
     final source = await materializeAsset(
       'assets/format_fixtures/short_prores.mov',
@@ -96,9 +109,10 @@ void main() {
     'session reuse and queued source changes preserve picture and sound',
     (tester) async {
       final controller = VlcPlayerController(
-        options: _audioHost.isEmpty
-            ? headlessPlayerOptions(requiresAudio: true)
-            : const [],
+        options: [
+          ...videoOptions,
+          if (_audioHost.isEmpty) ...headlessPlayerOptions(requiresAudio: true),
+        ],
       );
       addTearDown(controller.dispose);
       final uri = await materializeAsset(

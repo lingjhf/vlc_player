@@ -137,6 +137,7 @@ jobs:
         working-directory: example
         run: >
           flutter drive --no-pub --no-dds --timeout=420 -d macos
+          --dart-define=VLC_PLAYER_MACOS_HEADLESS_VIDEO=true
           --driver=test_driver/integration_test.dart
           --target=integration_test/session_lifecycle_test.dart
 
