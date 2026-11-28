@@ -318,17 +318,26 @@ final class VlcPlayerPlatformView: NSObject, VLCMediaPlayerDelegate, VLCMediaDel
   ) {
     #if os(iOS)
     nativeView = VlcPlayerContainerView(frame: frame)
+    let usesDummyOutput = false
     #elseif os(macOS)
     nativeView = VlcPlayerContainerView()
+    let usesDummyOutput = options.contains("--vout=dummy")
     #endif
-    mediaPlayer = VLCMediaPlayer(options: options)
+    if usesDummyOutput {
+      // Both the options initializer and attaching a drawable reset libVLC's vout.
+      mediaPlayer = VLCMediaPlayer(library: VLCLibrary(options: options))
+    } else {
+      mediaPlayer = VLCMediaPlayer(options: options)
+    }
     pausesAtEnd = options.contains("--play-and-pause")
     playerOptions = options
     eventChannel = FlutterEventChannel(name: "vlc_player/events/\(viewId)", binaryMessenger: messenger)
     super.init()
 
     nativeView.applyFit(fit)
-    mediaPlayer.drawable = nativeView
+    if !usesDummyOutput {
+      mediaPlayer.drawable = nativeView
+    }
     mediaPlayer.delegate = self
     eventHandler.onListen = { [weak self] in
       self?.sendSnapshot(force: true)
