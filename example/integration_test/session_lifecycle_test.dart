@@ -18,6 +18,80 @@ const _audioHost = String.fromEnvironment('VLC_PLAYER_AV_HOST');
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
+  testWidgets('macOS advances when a playlist item ends naturally', (
+    tester,
+  ) async {
+    final controller = VlcPlayerController(
+      options: headlessPlayerOptions(requiresAudio: true),
+    );
+    addTearDown(controller.dispose);
+    var secondItemEnded = false;
+    controller.addListener(() {
+      if (controller.playlistIndex == 1 &&
+          controller.value.state == VlcPlaybackState.ended) {
+        secondItemEnded = true;
+      }
+    });
+    final first = await materializeAsset('assets/format_fixtures/audio.mp3');
+    final second = await materializeAsset('assets/format_fixtures/audio.m4a');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: VlcPlayer(controller: controller)),
+      ),
+    );
+    await pumpUntil(
+      tester,
+      () => controller.isAttached,
+      description: 'macOS playlist attachment',
+    );
+    await controller.setPlaylist([
+      VlcMediaSource(uri: first),
+      VlcMediaSource(uri: second),
+    ], autoPlay: true);
+    await pumpUntil(
+      tester,
+      () => controller.playlistIndex == 1,
+      description: 'macOS playlist advance after EOF',
+    );
+    await pumpUntil(
+      tester,
+      () => secondItemEnded,
+      description: 'macOS playlist completion',
+    );
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  }, skip: !Platform.isMacOS);
+
+  testWidgets('Apple playback presents a frame from a six-frame ProRes clip', (
+    tester,
+  ) async {
+    final controller = VlcPlayerController();
+    addTearDown(controller.dispose);
+    final source = await materializeAsset(
+      'assets/format_fixtures/short_prores.mov',
+    );
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(body: VlcPlayer(controller: controller)),
+      ),
+    );
+    await pumpUntil(
+      tester,
+      () => controller.isAttached,
+      description: 'short ProRes player attachment',
+    );
+    await controller.setMedia(VlcMediaSource(uri: source), autoPlay: true);
+    var displayed = 0;
+    for (var attempt = 0; attempt < 160 && displayed == 0; attempt++) {
+      displayed = (await controller.getMediaStats()).displayedPictures;
+      await tester.pump(const Duration(milliseconds: 10));
+    }
+    expect(displayed, greaterThan(0));
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pump();
+  }, skip: !Platform.isMacOS && !Platform.isIOS);
+
   testWidgets(
     'session reuse and queued source changes preserve picture and sound',
     (tester) async {

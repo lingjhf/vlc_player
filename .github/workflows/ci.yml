@@ -125,9 +125,20 @@ jobs:
         working-directory: example
         run: flutter build ios --no-codesign
 
+      - name: Build iOS example for the simulator
+        working-directory: example
+        run: flutter build ios --simulator --no-pub
+
       - name: Build macOS example
         working-directory: example
         run: flutter build macos
+
+      - name: Verify macOS playback and session reuse
+        working-directory: example
+        run: >
+          flutter drive --no-pub --no-dds --timeout=420 -d macos
+          --driver=test_driver/integration_test.dart
+          --target=integration_test/session_lifecycle_test.dart
 
   windows:
     name: Windows
